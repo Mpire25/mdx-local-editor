@@ -17,6 +17,7 @@ type StoredEntry = {
 
 type SelectedFile = {
   fileHandle: FileSystemFileHandle;
+  dirHandle?: FileSystemDirectoryHandle;
   entryId: string;
   name: string;
 };
@@ -50,18 +51,24 @@ export default function EditorPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [showAddMenu, setShowAddMenu] = useState(false);
+  // rename: "entryId:filename" for folder files, or "entryId" for top-level files
+  const [renamingKey, setRenamingKey] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
   const addMenuRef = useRef<HTMLDivElement>(null);
   const pendingContent = useRef("");
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load persisted entries from IndexedDB on mount
   useEffect(() => {
     get<StoredEntry[]>(STORAGE_KEY).then((stored) => {
       if (stored?.length) setEntries(stored);
     });
   }, []);
 
-  // Close add menu on outside click
+  useEffect(() => {
+    if (renamingKey) renameInputRef.current?.focus();
+  }, [renamingKey]);
+
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (addMenuRef.current && !addMenuRef.current.contains(e.target as Node)) {
@@ -77,7 +84,7 @@ export default function EditorPage() {
     await set(STORAGE_KEY, next);
   }
 
-  // ─── Adding entries ───────────────────────────────────────────────────────
+  // ─── Adding ───────────────────────────────────────────────────────────────
 
   async function addFolder() {
     setShowAddMenu(false);
@@ -116,20 +123,9 @@ export default function EditorPage() {
 
   function removeEntry(id: string) {
     persist(entries.filter((e) => e.id !== id));
-    if (selected?.entryId === id) {
-      setSelected(null);
-      setContent("");
-    }
-    setFolderFiles((prev) => {
-      const n = { ...prev };
-      delete n[id];
-      return n;
-    });
-    setExpanded((prev) => {
-      const s = new Set(prev);
-      s.delete(id);
-      return s;
-    });
+    if (selected?.entryId === id) { setSelected(null); setContent(""); }
+    setFolderFiles((prev) => { const n = { ...prev }; delete n[id]; return n; });
+    setExpanded((prev) => { const s = new Set(prev); s.delete(id); return s; });
   }
 
   // ─── Folder expand ────────────────────────────────────────────────────────
@@ -155,7 +151,7 @@ export default function EditorPage() {
 
   // ─── Opening files ────────────────────────────────────────────────────────
 
-  async function openFileHandle(fileHandle: FileSystemFileHandle, entryId: string) {
+  async function openFileHandle(fileHandle: FileSystemFileHandle, entryId: string, dirHandle?: FileSystemDirectoryHandle) {
     const perm = await (fileHandle as unknown as FSHandleWithPermission).requestPermission({ mode: "readwrite" });
     if (perm !== "granted") return;
     const file = await fileHandle.getFile();
@@ -163,7 +159,7 @@ export default function EditorPage() {
     setContent(text);
     pendingContent.current = text;
     setSaved(false);
-    setSelected({ fileHandle, entryId, name: fileHandle.name });
+    setSelected({ fileHandle, dirHandle, entryId, name: fileHandle.name });
   }
 
   async function openFolderFile(filename: string, entryId: string) {
@@ -171,7 +167,7 @@ export default function EditorPage() {
     if (!entry || entry.kind !== "directory") return;
     const dir = entry.handle as FileSystemDirectoryHandle;
     const fileHandle = await dir.getFileHandle(filename);
-    await openFileHandle(fileHandle, entryId);
+    await openFileHandle(fileHandle, entryId, dir);
   }
 
   // ─── Saving ───────────────────────────────────────────────────────────────
@@ -196,6 +192,52 @@ export default function EditorPage() {
     }
   }
 
+  // ─── Renaming ─────────────────────────────────────────────────────────────
+
+  function startRename(key: string, currentName: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    setRenamingKey(key);
+    setRenameValue(currentName.replace(/\.mdx$/, ""));
+  }
+
+  async function commitRename() {
+    if (!renamingKey || !renameValue.trim()) { setRenamingKey(null); return; }
+    const newBase = renameValue.trim();
+    const newName = newBase.endsWith(".mdx") ? newBase : newBase + ".mdx";
+
+    // Folder file: "entryId:oldFilename"
+    if (renamingKey.includes(":")) {
+      const [entryId, oldName] = renamingKey.split(":");
+      if (newName === oldName) { setRenamingKey(null); return; }
+
+      const entry = entries.find((e) => e.id === entryId);
+      if (!entry || entry.kind !== "directory") { setRenamingKey(null); return; }
+      const dir = entry.handle as FileSystemDirectoryHandle;
+
+      // Read old → write new → delete old
+      const oldHandle = await dir.getFileHandle(oldName);
+      const file = await oldHandle.getFile();
+      const fileContent = await file.text();
+      const newHandle = await dir.getFileHandle(newName, { create: true });
+      const writable = await newHandle.createWritable();
+      await writable.write(fileContent);
+      await writable.close();
+      await dir.removeEntry(oldName);
+
+      setFolderFiles((prev) => ({
+        ...prev,
+        [entryId]: (prev[entryId] ?? []).map((f) => (f === oldName ? newName : f)).sort(),
+      }));
+
+      // Update selected if it was the renamed file
+      if (selected?.entryId === entryId && selected.name === oldName) {
+        setSelected({ fileHandle: newHandle, dirHandle: dir, entryId, name: newName });
+      }
+    }
+
+    setRenamingKey(null);
+  }
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -203,9 +245,7 @@ export default function EditorPage() {
       {/* Sidebar */}
       <aside className="w-60 shrink-0 border-r border-gray-200 flex flex-col">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-            Files
-          </span>
+          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Files</span>
           <div className="relative" ref={addMenuRef}>
             <button
               onClick={() => setShowAddMenu((v) => !v)}
@@ -216,16 +256,10 @@ export default function EditorPage() {
             </button>
             {showAddMenu && (
               <div className="absolute right-0 top-7 z-10 bg-white border border-gray-200 rounded shadow-lg text-sm min-w-[140px] py-1">
-                <button
-                  onClick={addFolder}
-                  className="w-full text-left px-4 py-2 hover:bg-gray-50"
-                >
+                <button onClick={addFolder} className="w-full text-left px-4 py-2 hover:bg-gray-50">
                   Open Folder
                 </button>
-                <button
-                  onClick={addFile}
-                  className="w-full text-left px-4 py-2 hover:bg-gray-50"
-                >
+                <button onClick={addFile} className="w-full text-left px-4 py-2 hover:bg-gray-50">
                   Open File
                 </button>
               </div>
@@ -242,6 +276,7 @@ export default function EditorPage() {
             <ul>
               {entries.map((entry) => (
                 <li key={entry.id} className="group">
+                  {/* Top-level entry row */}
                   <div className="flex items-center pr-1 hover:bg-gray-50">
                     {entry.kind === "directory" ? (
                       <button
@@ -270,26 +305,50 @@ export default function EditorPage() {
                     </button>
                   </div>
 
+                  {/* Folder file list */}
                   {entry.kind === "directory" && expanded.has(entry.id) && (
                     <ul>
-                      {(folderFiles[entry.id] ?? []).map((filename) => (
-                        <li key={filename}>
-                          <button
-                            onClick={() => openFolderFile(filename, entry.id)}
-                            className={`w-full text-left pl-8 pr-3 py-1.5 text-sm truncate hover:bg-gray-50 ${
-                              selected?.name === filename && selected?.entryId === entry.id
-                                ? "bg-gray-100 font-medium"
-                                : ""
-                            }`}
-                          >
-                            {filename.replace(".mdx", "")}
-                          </button>
-                        </li>
-                      ))}
+                      {(folderFiles[entry.id] ?? []).map((filename) => {
+                        const renameKey = `${entry.id}:${filename}`;
+                        const isRenaming = renamingKey === renameKey;
+                        const isSelected = selected?.name === filename && selected?.entryId === entry.id;
+
+                        return (
+                          <li key={filename} className="group/file relative">
+                            {isRenaming ? (
+                              <input
+                                ref={renameInputRef}
+                                value={renameValue}
+                                onChange={(e) => setRenameValue(e.target.value)}
+                                onBlur={commitRename}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") commitRename();
+                                  if (e.key === "Escape") setRenamingKey(null);
+                                }}
+                                className="w-full pl-8 pr-3 py-1.5 text-sm bg-blue-50 border-b border-blue-300 outline-none"
+                              />
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => openFolderFile(filename, entry.id)}
+                                  className={`w-full text-left pl-8 pr-7 py-1.5 text-sm truncate hover:bg-gray-50 ${isSelected ? "bg-gray-100 font-medium" : ""}`}
+                                >
+                                  {filename.replace(".mdx", "")}
+                                </button>
+                                <button
+                                  onClick={(e) => startRename(renameKey, filename, e)}
+                                  title="Rename"
+                                  className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover/file:opacity-100 text-gray-400 hover:text-gray-700 text-xs px-1"
+                                >
+                                  ✎
+                                </button>
+                              </>
+                            )}
+                          </li>
+                        );
+                      })}
                       {(folderFiles[entry.id] ?? []).length === 0 && (
-                        <li className="pl-8 pr-3 py-1.5 text-xs text-gray-400">
-                          No .mdx files
-                        </li>
+                        <li className="pl-8 pr-3 py-1.5 text-xs text-gray-400">No .mdx files</li>
                       )}
                     </ul>
                   )}
