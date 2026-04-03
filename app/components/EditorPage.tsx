@@ -454,7 +454,12 @@ export default function EditorPage() {
 
       {/* ── CSS Profile Editor Modal ──────────────────────────────────────── */}
       {editingKey !== null && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-8">
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-8"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setEditingKey(null);
+          }}
+        >
           <div className="bg-white dark:bg-black rounded-lg shadow-xl w-full max-w-2xl flex flex-col overflow-hidden border border-gray-200 dark:border-[#2a2a2a]">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-[#2a2a2a] shrink-0">
               <div>
