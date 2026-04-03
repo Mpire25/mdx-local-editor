@@ -131,6 +131,36 @@ export default function MdxEditor({
             color: #f2f2f2;
             background-color: #1f1f1f;
           }
+
+          /* Ensure the inner CodeMirror surface also follows dark mode. */
+          .mdxeditor.dark .cm-editor,
+          .mdxeditor.dark .cm-scroller,
+          .mdxeditor.dark .cm-content {
+            background-color: #0b0b0b;
+            color: #f1f1f1;
+          }
+
+          .mdxeditor.dark .cm-gutters {
+            background-color: #0b0b0b;
+            color: #8f8f8f;
+            border-right: 1px solid #2a2a2a;
+          }
+
+          .mdxeditor.dark .cm-activeLine,
+          .mdxeditor.dark .cm-activeLineGutter {
+            background-color: #151515;
+          }
+
+          .mdxeditor.dark .cm-selectionBackground,
+          .mdxeditor.dark .cm-focused .cm-selectionBackground,
+          .mdxeditor.dark .cm-line::selection,
+          .mdxeditor.dark .cm-line > span::selection {
+            background-color: #2b3544;
+          }
+
+          .mdxeditor.dark .cm-cursor {
+            border-left-color: #f1f1f1;
+          }
         `}</style>
       )}
       {css && <style>{css}</style>}
