@@ -440,6 +440,12 @@ export default function EditorPage() {
 
   const { css: resolvedCss, source: profileSource } = resolveProfile(selected, entries, cssProfiles, defaultCss, theme);
   const isCustomCss = profileSource !== "built-in";
+  const selectedEntry = selected ? entries.find((entry) => entry.id === selected.entryId) : null;
+  const selectedDisplayName = selected
+    ? selectedEntry?.kind === "directory"
+      ? `${selectedEntry.name} / ${selected.name}`
+      : selected.name
+    : "";
 
   const sourceBadge: Record<ProfileSource, { label: string; className: string }> = {
     file:      { label: "file css",    className: "bg-gray-100 text-gray-600 dark:bg-[#121212] dark:text-[#d0d0d0]" },
@@ -675,7 +681,7 @@ export default function EditorPage() {
                 >
                   {sidebarOpen ? "◀" : "▶"}
                 </button>
-                <span className="truncate">{selected.name}</span>
+                <span className="truncate">{selectedDisplayName}</span>
               </div>
               <div className="flex items-center gap-3">
                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${sourceBadge[profileSource].className}`}>
