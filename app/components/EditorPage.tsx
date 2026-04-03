@@ -176,6 +176,7 @@ export default function EditorPage() {
   const [saved, setSaved] = useState(false);
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [theme, setTheme] = useState<Theme>("light");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // CSS profiles
   const [cssProfiles, setCssProfiles] = useState<Record<string, string>>({});
@@ -501,6 +502,7 @@ export default function EditorPage() {
       )}
 
       {/* ── Sidebar ───────────────────────────────────────────────────────── */}
+      {sidebarOpen && (
       <aside className="w-60 shrink-0 border-r border-gray-200 dark:border-[#242424] flex flex-col bg-white dark:bg-black">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-[#242424]">
           <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-[#a2a2a2]">Files</span>
@@ -649,13 +651,32 @@ export default function EditorPage() {
           )}
         </div>
       </aside>
+      )}
 
       {/* ── Editor ────────────────────────────────────────────────────────── */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="relative flex-1 flex flex-col overflow-hidden">
+        {!sidebarOpen && !selected && (
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="absolute left-3 top-2 z-10 w-6 h-6 flex items-center justify-center rounded border border-gray-200 dark:border-[#2a2a2a] bg-white dark:bg-black text-gray-500 dark:text-[#a2a2a2] hover:text-gray-800 dark:hover:text-[#f1f1f1] hover:bg-gray-50 dark:hover:bg-[#171717]"
+            title="Open sidebar"
+          >
+            ▶
+          </button>
+        )}
         {selected ? (
           <>
             <div className="flex items-center justify-between px-6 py-2 border-b border-gray-200 dark:border-[#242424] text-xs text-gray-400 dark:text-[#9a9a9a] bg-white dark:bg-black">
-              <span>{selected.name}</span>
+              <div className="flex items-center gap-3 min-w-0">
+                <button
+                  onClick={() => setSidebarOpen((v) => !v)}
+                  className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-[#171717] text-gray-500 dark:text-[#a2a2a2] hover:text-gray-800 dark:hover:text-[#f1f1f1] text-sm shrink-0"
+                  title={sidebarOpen ? "Close sidebar" : "Open sidebar"}
+                >
+                  {sidebarOpen ? "◀" : "▶"}
+                </button>
+                <span className="truncate">{selected.name}</span>
+              </div>
               <div className="flex items-center gap-3">
                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${sourceBadge[profileSource].className}`}>
                   {sourceBadge[profileSource].label}
