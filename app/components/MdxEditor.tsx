@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import "@mdxeditor/editor/style.css";
 import {
   MDXEditor,
@@ -50,16 +51,19 @@ export default function MdxEditor({
   usingCustomCss = false,
   theme = "light",
 }: Props) {
+  const shellRef = useRef<HTMLDivElement>(null);
+
   const themeClass = theme === "dark" ? "dark" : "light";
   const contentClassName = [
     "mdx-content max-w-none p-4 min-h-[60vh] focus:outline-none",
+    "mdx-content--bounded",
     usingCustomCss ? "" : "bg-transparent",
   ]
     .filter(Boolean)
     .join(" ");
 
   return (
-    <div className={`${themeClass} mdx-editor-shell`}>
+    <div ref={shellRef} className={`${themeClass} mdx-editor-shell`}>
       {theme === "dark" && (
         <style>{`
           .mdxeditor.dark {
@@ -225,6 +229,38 @@ export default function MdxEditor({
                 <InsertTable />
                 <InsertThematicBreak />
                 <InsertCodeBlock />
+                <Separator />
+                <label className="ml-1 inline-flex items-center gap-1 text-[11px] text-gray-600 dark:text-[#a8a8a8]">
+                  <span>Max width</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    onChange={(e) => {
+                      const digitsOnly = e.target.value.replace(/\D+/g, "");
+                      if (digitsOnly !== e.target.value) e.target.value = digitsOnly;
+
+                      if (!digitsOnly) {
+                        shellRef.current?.style.removeProperty("--mdx-rich-max-width");
+                        return;
+                      }
+
+                      const parsed = Number.parseInt(digitsOnly, 10);
+                      if (!Number.isFinite(parsed)) return;
+                      const clamped = Math.max(300, parsed);
+                      shellRef.current?.style.setProperty("--mdx-rich-max-width", `${clamped}px`);
+                    }}
+                    onBlur={(e) => {
+                      if (!e.target.value) return;
+                      const parsed = Number.parseInt(e.target.value, 10);
+                      if (!Number.isFinite(parsed)) return;
+                      if (parsed < 300) e.target.value = "300";
+                    }}
+                    placeholder="px"
+                    aria-label="Max content width in pixels"
+                    className="w-20 rounded border border-gray-300 dark:border-[#3a3a3a] bg-white dark:bg-[#0f0f0f] px-2 py-1 text-xs text-gray-900 dark:text-[#f1f1f1]"
+                  />
+                  <span className="text-[10px]">px</span>
+                </label>
               </DiffSourceToggleWrapper>
             ),
           }),

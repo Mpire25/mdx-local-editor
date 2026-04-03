@@ -46,6 +46,38 @@ body {
   margin: 0.75rem 0.75rem 0.5rem;
   border: 1px solid var(--editor-toolbar-border);
   box-shadow: var(--editor-toolbar-shadow);
+  scrollbar-width: thin;
+  scrollbar-color: var(--sidebar-scroll-thumb) var(--sidebar-scroll-track);
+}
+
+.mdx-editor-shell .mdxeditor [class*="_toolbarRoot_"]::-webkit-scrollbar,
+.mdx-editor-shell .mdxeditor .mdxeditor-toolbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.mdx-editor-shell .mdxeditor [class*="_toolbarRoot_"]::-webkit-scrollbar-track,
+.mdx-editor-shell .mdxeditor .mdxeditor-toolbar::-webkit-scrollbar-track {
+  background: var(--sidebar-scroll-track);
+}
+
+.mdx-editor-shell .mdxeditor [class*="_toolbarRoot_"]::-webkit-scrollbar-thumb,
+.mdx-editor-shell .mdxeditor .mdxeditor-toolbar::-webkit-scrollbar-thumb {
+  background: var(--sidebar-scroll-thumb);
+  border-radius: 9999px;
+  border: 2px solid var(--sidebar-scroll-track);
+}
+
+.mdx-editor-shell .mdxeditor [class*="_toolbarRoot_"]::-webkit-scrollbar-thumb:hover,
+.mdx-editor-shell .mdxeditor .mdxeditor-toolbar::-webkit-scrollbar-thumb:hover {
+  background: var(--sidebar-scroll-thumb-hover);
+}
+
+.mdx-editor-shell .mdxeditor [class*="_contentEditable_"].mdx-content--bounded {
+  width: 100%;
+  max-width: var(--mdx-rich-max-width, none) !important;
+  margin-inline: auto;
+  overflow-wrap: anywhere;
 }
 
 .sidebar-scroll-area {
