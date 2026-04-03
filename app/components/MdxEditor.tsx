@@ -103,6 +103,34 @@ export default function MdxEditor({
             --accentText: #d4d4d4;
             --accentTextContrast: #f8f8f8;
           }
+
+          /* Radix select menus are portaled outside .mdxeditor, so they need explicit dark tokens. */
+          .dark [class*="_toolbarNodeKindSelectContainer_"],
+          .dark [class*="_toolbarButtonDropdownContainer_"],
+          .dark [class*="_toolbarCodeBlockLanguageSelectContent_"],
+          .dark [class*="_selectContainer_"] {
+            background-color: #050505;
+            color: #b5b5b5;
+            border: 1px solid #2a2a2a;
+          }
+
+          .dark [class*="_toolbarNodeKindSelectItem_"],
+          .dark [class*="_selectItem_"] {
+            color: #b5b5b5;
+            background-color: transparent;
+          }
+
+          .dark [class*="_toolbarNodeKindSelectItem_"][data-highlighted],
+          .dark [class*="_selectItem_"][data-highlighted] {
+            color: #f2f2f2;
+            background-color: #171717;
+          }
+
+          .dark [class*="_toolbarNodeKindSelectItem_"][data-state='checked'],
+          .dark [class*="_selectItem_"][data-state='checked'] {
+            color: #f2f2f2;
+            background-color: #1f1f1f;
+          }
         `}</style>
       )}
       {css && <style>{css}</style>}
