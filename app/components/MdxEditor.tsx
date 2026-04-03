@@ -59,7 +59,7 @@ export default function MdxEditor({
     .join(" ");
 
   return (
-    <div className={themeClass}>
+    <div className={`${themeClass} mdx-editor-shell`}>
       {theme === "dark" && (
         <style>{`
           .mdxeditor.dark {

@@ -535,7 +535,7 @@ export default function EditorPage() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="sidebar-scroll-area flex-1 overflow-y-auto overflow-x-auto">
           {entries.length === 0 ? (
             <p className="text-xs text-gray-400 dark:text-[#737373] px-4 py-6 text-center leading-relaxed">
               Press <span className="font-medium text-gray-500 dark:text-[#9a9a9a]">+</span> to open a folder or file
@@ -659,7 +659,7 @@ export default function EditorPage() {
               </div>
             </div>
             <div
-              className="flex-1 overflow-y-auto"
+              className="editor-scroll-area flex-1 overflow-y-auto p-3 sm:p-4"
               style={isCustomCss ? { background: "var(--background, white)" } : undefined}
             >
               <MdxEditor

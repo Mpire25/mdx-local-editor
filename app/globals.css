@@ -4,6 +4,11 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --sidebar-scroll-thumb: #c7cfd9;
+  --sidebar-scroll-thumb-hover: #a9b5c3;
+  --sidebar-scroll-track: #eef2f7;
+  --editor-toolbar-border: #e5e7eb;
+  --editor-toolbar-shadow: 0 8px 22px rgba(17, 24, 39, 0.08);
 }
 
 @theme inline {
@@ -16,10 +21,53 @@
 .dark {
   --background: #000000;
   --foreground: #ededed;
+  --sidebar-scroll-thumb: #3d444d;
+  --sidebar-scroll-thumb-hover: #525c68;
+  --sidebar-scroll-track: #161a1f;
+  --editor-toolbar-border: #2a2a2a;
+  --editor-toolbar-shadow: 0 12px 24px rgba(0, 0, 0, 0.45);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+.mdx-editor-shell .mdxeditor {
+  border: 1px solid var(--editor-toolbar-border);
+  border-radius: 0.9rem;
+  overflow: clip;
+}
+
+.mdx-editor-shell .mdxeditor [class*="_toolbarRoot_"] {
+  top: 0.75rem;
+  width: auto;
+  margin: 0.75rem 0.75rem 0.5rem;
+  border: 1px solid var(--editor-toolbar-border);
+  box-shadow: var(--editor-toolbar-shadow);
+}
+
+.sidebar-scroll-area {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sidebar-scroll-thumb) var(--sidebar-scroll-track);
+}
+
+.sidebar-scroll-area::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.sidebar-scroll-area::-webkit-scrollbar-track {
+  background: var(--sidebar-scroll-track);
+}
+
+.sidebar-scroll-area::-webkit-scrollbar-thumb {
+  background: var(--sidebar-scroll-thumb);
+  border-radius: 9999px;
+  border: 2px solid var(--sidebar-scroll-track);
+}
+
+.sidebar-scroll-area::-webkit-scrollbar-thumb:hover {
+  background: var(--sidebar-scroll-thumb-hover);
 }
