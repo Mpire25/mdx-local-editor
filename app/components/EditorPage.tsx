@@ -459,6 +459,12 @@ export default function EditorPage() {
     saveTimeout.current = setTimeout(() => autoSave(value), 1500);
   }
 
+  function showSavedIndicator() {
+    setSaved(true);
+    if (savedIndicatorTimeout.current) clearTimeout(savedIndicatorTimeout.current);
+    savedIndicatorTimeout.current = setTimeout(() => setSaved(false), 1500);
+  }
+
   async function autoSave(value: string, showSuccessToast = false) {
     if (!selected) return;
     setSaving(true);
@@ -466,12 +472,10 @@ export default function EditorPage() {
       const writable = await selected.fileHandle.createWritable();
       await writable.write(value);
       await writable.close();
-      setSaved(true);
+      showSavedIndicator();
       if (showSuccessToast) {
         toast.success("Saved", selected.name);
       }
-      if (savedIndicatorTimeout.current) clearTimeout(savedIndicatorTimeout.current);
-      savedIndicatorTimeout.current = setTimeout(() => setSaved(false), 1500);
     } catch (error) {
       if (isNotFoundError(error)) {
         if (selected.dirHandle) {
@@ -533,16 +537,36 @@ export default function EditorPage() {
       await writable.write(pendingContent.current);
       await writable.close();
 
-      const nextEntry: StoredEntry = {
-        id: crypto.randomUUID(),
-        kind: "file",
-        handle: newHandle,
-        name: newHandle.name,
-      };
-      const nextEntries = [...entries, nextEntry];
-      await persistEntries(nextEntries);
-      setSelected({ fileHandle: newHandle, entryId: nextEntry.id, name: newHandle.name });
-      setSaved(true);
+      let existingEntry: StoredEntry | null = null;
+      for (const entry of entries) {
+        if (entry.kind !== "file") continue;
+        if (await entry.handle.isSameEntry(newHandle)) {
+          existingEntry = entry;
+          break;
+        }
+      }
+
+      if (existingEntry) {
+        const nextEntries = entries.map((entry) => (
+          entry.id === existingEntry?.id
+            ? { ...entry, handle: newHandle, name: newHandle.name }
+            : entry
+        ));
+        await persistEntries(nextEntries);
+        setSelected({ fileHandle: newHandle, entryId: existingEntry.id, name: newHandle.name });
+      } else {
+        const nextEntry: StoredEntry = {
+          id: crypto.randomUUID(),
+          kind: "file",
+          handle: newHandle,
+          name: newHandle.name,
+        };
+        const nextEntries = [...entries, nextEntry];
+        await persistEntries(nextEntries);
+        setSelected({ fileHandle: newHandle, entryId: nextEntry.id, name: newHandle.name });
+      }
+
+      showSavedIndicator();
       toast.success("Saved as new file", newHandle.name);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
