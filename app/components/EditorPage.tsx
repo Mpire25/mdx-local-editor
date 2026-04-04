@@ -647,8 +647,10 @@ export default function EditorPage() {
         }
 
         const oldHandle = await dir.getFileHandle(oldName);
-        const file = await oldHandle.getFile();
-        const fileContent = await file.text();
+        const isCurrentFile = selected?.entryId === entryId && selected.name === oldName;
+        const fileContent = isCurrentFile
+          ? pendingContent.current
+          : await (await oldHandle.getFile()).text();
         const newHandle = await dir.getFileHandle(newName, { create: true });
         const writable = await newHandle.createWritable();
         await writable.write(fileContent);
