@@ -24,6 +24,7 @@ type SelectedFile = {
 
 type ProfileSource = "file" | "folder" | "default" | "built-in";
 type Theme = "light" | "dark";
+type Notice = { title: string; message: string } | null;
 
 // ─── Built-in default CSS ─────────────────────────────────────────────────────
 
@@ -205,6 +206,7 @@ export default function EditorPage() {
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [theme, setTheme] = useState<Theme>("light");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [notice, setNotice] = useState<Notice>(null);
 
   // CSS profiles
   const [cssProfiles, setCssProfiles] = useState<Record<string, string>>({});
@@ -285,7 +287,10 @@ export default function EditorPage() {
   async function addFolder() {
     setShowAddMenu(false);
     if (!("showDirectoryPicker" in window)) {
-      alert("Your browser doesn't support folder picking. Use Chrome or Edge.");
+      setNotice({
+        title: "Folder Picker Not Supported",
+        message: "Your browser does not support folder picking. Use Chrome or Edge.",
+      });
       return;
     }
     try {
@@ -301,7 +306,10 @@ export default function EditorPage() {
   async function addFile() {
     setShowAddMenu(false);
     if (!("showOpenFilePicker" in window)) {
-      alert("Your browser doesn't support file picking. Use Chrome or Edge.");
+      setNotice({
+        title: "File Picker Not Supported",
+        message: "Your browser does not support file picking. Use Chrome or Edge.",
+      });
       return;
     }
     try {
@@ -363,7 +371,10 @@ export default function EditorPage() {
       } catch (error) {
         if (isNotFoundError(error)) {
           removeEntry(id);
-          alert(`"${entry.name}" is no longer available and was removed from the sidebar.`);
+          setNotice({
+            title: "Folder Unavailable",
+            message: `"${entry.name}" is no longer available and was removed from the sidebar.`,
+          });
           return;
         }
         throw error;
@@ -395,7 +406,10 @@ export default function EditorPage() {
         } else {
           removeEntry(entryId);
         }
-        alert(`"${fileHandle.name}" could not be found and was removed from the sidebar.`);
+        setNotice({
+          title: "File Missing",
+          message: `"${fileHandle.name}" could not be found and was removed from the sidebar.`,
+        });
         return;
       }
       throw error;
@@ -412,7 +426,10 @@ export default function EditorPage() {
     } catch (error) {
       if (isNotFoundError(error)) {
         removeMissingFolderFile(entryId, filename);
-        alert(`"${filename}" no longer exists and was removed from the list.`);
+        setNotice({
+          title: "File Removed",
+          message: `"${filename}" no longer exists and was removed from the list.`,
+        });
         return;
       }
       throw error;
@@ -443,7 +460,10 @@ export default function EditorPage() {
         } else {
           removeEntry(selected.entryId);
         }
-        alert(`"${selected.name}" no longer exists. It was removed from the sidebar.`);
+        setNotice({
+          title: "Save Failed",
+          message: `"${selected.name}" no longer exists. It was removed from the sidebar.`,
+        });
         return;
       }
       throw error;
@@ -554,6 +574,31 @@ export default function EditorPage() {
 
   return (
     <div className="flex h-screen bg-white dark:bg-black text-gray-900 dark:text-gray-100">
+      {notice && (
+        <div
+          className="fixed inset-0 z-[70] bg-black/55 backdrop-blur-[1px] flex items-center justify-center p-6"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setNotice(null);
+          }}
+        >
+          <div className="w-full max-w-md rounded-2xl border border-gray-200/90 dark:border-[#2a2a2a] bg-white dark:bg-[#060606] shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100 dark:border-[#1f1f1f]">
+              <p className="text-sm font-semibold tracking-tight text-gray-900 dark:text-[#f5f5f5]">{notice.title}</p>
+            </div>
+            <div className="px-5 py-4 text-sm leading-relaxed text-gray-600 dark:text-[#b8b8b8]">
+              {notice.message}
+            </div>
+            <div className="px-5 py-4 border-t border-gray-100 dark:border-[#1f1f1f] flex justify-end">
+              <button
+                onClick={() => setNotice(null)}
+                className="px-3 py-1.5 text-sm rounded-md border border-gray-200 dark:border-[#2f2f2f] bg-white dark:bg-[#111111] hover:bg-gray-50 dark:hover:bg-[#1a1a1a] text-gray-700 dark:text-[#e5e5e5]"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── CSS Profile Editor Modal ──────────────────────────────────────── */}
       {editingKey !== null && (
