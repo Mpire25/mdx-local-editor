@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { get, set } from "idb-keyval";
 
 const MdxEditor = dynamic(() => import("./MdxEditor"), { ssr: false });
@@ -25,6 +25,7 @@ type SelectedFile = {
 type ProfileSource = "file" | "folder" | "default" | "built-in";
 type Theme = "light" | "dark";
 type Notice = { title: string; message: string } | null;
+type SaveTooltip = "save" | "saveAs" | null;
 
 // ─── Built-in default CSS ─────────────────────────────────────────────────────
 
@@ -207,6 +208,7 @@ export default function EditorPage() {
   const [theme, setTheme] = useState<Theme>("light");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [notice, setNotice] = useState<Notice>(null);
+  const [saveTooltip, setSaveTooltip] = useState<SaveTooltip>(null);
 
   // CSS profiles
   const [cssProfiles, setCssProfiles] = useState<Record<string, string>>({});
@@ -223,6 +225,7 @@ export default function EditorPage() {
 
   const renameInputRef = useRef<HTMLInputElement>(null);
   const addMenuRef = useRef<HTMLDivElement>(null);
+  const saveTooltipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingContent = useRef("");
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -263,6 +266,12 @@ export default function EditorPage() {
     }
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (saveTooltipTimeoutRef.current) clearTimeout(saveTooltipTimeoutRef.current);
+    };
   }, []);
 
   // ─── Persistence ────────────────────────────────────────────────────────
@@ -471,6 +480,99 @@ export default function EditorPage() {
       setSaving(false);
     }
   }
+
+  async function manualSave() {
+    if (!selected || saving) return;
+    if (saveTimeout.current) {
+      clearTimeout(saveTimeout.current);
+      saveTimeout.current = null;
+    }
+    await autoSave(pendingContent.current);
+  }
+
+  async function saveAs() {
+    if (!selected || saving) return;
+    if (!("showSaveFilePicker" in window)) {
+      setNotice({
+        title: "Save As Not Supported",
+        message: "Your browser does not support Save As. Use Chrome or Edge.",
+      });
+      return;
+    }
+
+    try {
+      const newHandle = await (window as typeof window & {
+        showSaveFilePicker: (o?: object) => Promise<FileSystemFileHandle>;
+      }).showSaveFilePicker({
+        suggestedName: selected.name,
+        types: [
+          {
+            description: "Markdown Files",
+            accept: {
+              "text/markdown": [".md", ".mdx"],
+              "text/plain": [".md", ".mdx"],
+            },
+          },
+        ],
+      });
+
+      const perm = await (newHandle as unknown as FSHandleWithPermission).requestPermission({ mode: "readwrite" });
+      if (perm !== "granted") return;
+
+      const writable = await newHandle.createWritable();
+      await writable.write(pendingContent.current);
+      await writable.close();
+
+      const nextEntry: StoredEntry = {
+        id: crypto.randomUUID(),
+        kind: "file",
+        handle: newHandle,
+        name: newHandle.name,
+      };
+      const nextEntries = [...entries, nextEntry];
+      await persistEntries(nextEntries);
+      setSelected({ fileHandle: newHandle, entryId: nextEntry.id, name: newHandle.name });
+      setSaved(true);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setNotice({
+        title: "Save As Failed",
+        message: "Could not save a new file. Please try again.",
+      });
+    }
+  }
+
+  function showSaveTooltipWithDelay(nextTooltip: Exclude<SaveTooltip, null>) {
+    if (saveTooltipTimeoutRef.current) clearTimeout(saveTooltipTimeoutRef.current);
+    saveTooltipTimeoutRef.current = setTimeout(() => {
+      setSaveTooltip(nextTooltip);
+    }, 550);
+  }
+
+  function hideSaveTooltip() {
+    if (saveTooltipTimeoutRef.current) clearTimeout(saveTooltipTimeoutRef.current);
+    setSaveTooltip(null);
+  }
+
+  const onSaveHotkey = useEffectEvent((e: KeyboardEvent) => {
+    if (!selected) return;
+    if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "s") return;
+    e.preventDefault();
+    if (e.shiftKey) {
+      void saveAs();
+    } else {
+      void manualSave();
+    }
+  });
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      onSaveHotkey(e);
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   // ─── Renaming ───────────────────────────────────────────────────────────
 
@@ -824,7 +926,43 @@ export default function EditorPage() {
                 </button>
                 <span className="truncate">{selectedDisplayName}</span>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <button
+                    onClick={() => void manualSave()}
+                    onMouseEnter={() => showSaveTooltipWithDelay("save")}
+                    onMouseLeave={hideSaveTooltip}
+                    onFocus={() => showSaveTooltipWithDelay("save")}
+                    onBlur={hideSaveTooltip}
+                    disabled={saving}
+                    className="px-2 py-1 rounded border border-gray-200 dark:border-[#2a2a2a] text-gray-600 dark:text-[#c8c8c8] hover:text-gray-900 dark:hover:text-[#f1f1f1] hover:bg-gray-50 dark:hover:bg-[#171717] disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Save
+                  </button>
+                  {saveTooltip === "save" && (
+                    <span className="absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap px-1.5 py-0.5 rounded text-[10px] font-mono bg-gray-900 text-white dark:bg-[#e8e8e8] dark:text-black shadow-lg z-20">
+                      Ctrl/Cmd+S
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <button
+                    onClick={() => void saveAs()}
+                    onMouseEnter={() => showSaveTooltipWithDelay("saveAs")}
+                    onMouseLeave={hideSaveTooltip}
+                    onFocus={() => showSaveTooltipWithDelay("saveAs")}
+                    onBlur={hideSaveTooltip}
+                    disabled={saving}
+                    className="px-2 py-1 rounded border border-gray-200 dark:border-[#2a2a2a] text-gray-600 dark:text-[#c8c8c8] hover:text-gray-900 dark:hover:text-[#f1f1f1] hover:bg-gray-50 dark:hover:bg-[#171717] disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Save As
+                  </button>
+                  {saveTooltip === "saveAs" && (
+                    <span className="absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap px-1.5 py-0.5 rounded text-[10px] font-mono bg-gray-900 text-white dark:bg-[#e8e8e8] dark:text-black shadow-lg z-20">
+                      Ctrl/Cmd+Shift+S
+                    </span>
+                  )}
+                </div>
                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${sourceBadge[profileSource].className}`}>
                   {sourceBadge[profileSource].label}
                 </span>
