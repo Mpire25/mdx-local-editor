@@ -248,6 +248,8 @@ export default function EditorPage() {
       if (storedEntries?.length) setEntries(storedEntries);
       if (storedProfiles) setCssProfiles(storedProfiles);
       if (typeof storedDefault === "string") setDefaultCss(storedDefault);
+    }).catch((error) => {
+      console.error("Failed to restore workspace from storage:", error);
     });
   }, []);
 
