@@ -136,11 +136,27 @@ const CSS_PROFILES_KEY = "mdx-editor-css-profiles";
 const DEFAULT_CSS_KEY = "mdx-editor-default-css";
 const THEME_KEY = "mdx-editor-theme";
 
-async function listMdxFiles(dir: FileSystemDirectoryHandle): Promise<string[]> {
+function getMarkdownExtension(filename: string): ".md" | ".mdx" | null {
+  const lowered = filename.toLowerCase();
+  if (lowered.endsWith(".mdx")) return ".mdx";
+  if (lowered.endsWith(".md")) return ".md";
+  return null;
+}
+
+function isMarkdownFilename(filename: string): boolean {
+  return getMarkdownExtension(filename) !== null;
+}
+
+function stripMarkdownExtension(filename: string): string {
+  const ext = getMarkdownExtension(filename);
+  return ext ? filename.slice(0, -ext.length) : filename;
+}
+
+async function listMarkdownFiles(dir: FileSystemDirectoryHandle): Promise<string[]> {
   const names: string[] = [];
   const iterable = dir as unknown as AsyncIterable<[string, FileSystemHandle]>;
   for await (const [name, handle] of iterable) {
-    if (handle.kind === "file" && name.endsWith(".mdx")) names.push(name);
+    if (handle.kind === "file" && isMarkdownFilename(name)) names.push(name);
   }
   return names.sort();
 }
@@ -271,7 +287,7 @@ export default function EditorPage() {
     try {
       const dir = await (window as typeof window & { showDirectoryPicker: (o?: object) => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker({ mode: "readwrite" });
       const entry: StoredEntry = { id: crypto.randomUUID(), kind: "directory", handle: dir, name: dir.name };
-      const files = await listMdxFiles(dir);
+      const files = await listMarkdownFiles(dir);
       setFolderFiles((prev) => ({ ...prev, [entry.id]: files }));
       setExpanded((prev) => new Set([...prev, entry.id]));
       await persistEntries([...entries, entry]);
@@ -286,7 +302,15 @@ export default function EditorPage() {
     }
     try {
       const [handle] = await (window as typeof window & { showOpenFilePicker: (o?: object) => Promise<FileSystemFileHandle[]> }).showOpenFilePicker({
-        types: [{ description: "MDX Files", accept: { "text/markdown": [".mdx"] } }],
+        types: [
+          {
+            description: "Markdown Files",
+            accept: {
+              "text/markdown": [".md", ".mdx"],
+              "text/plain": [".md", ".mdx"],
+            },
+          },
+        ],
       });
       const entry: StoredEntry = { id: crypto.randomUUID(), kind: "file", handle, name: handle.name };
       await persistEntries([...entries, entry]);
@@ -316,7 +340,7 @@ export default function EditorPage() {
 
     if (!folderFiles[id]) {
       setFolderFiles((prev) => ({ ...prev, [id]: [] }));
-      const files = await listMdxFiles(dir);
+      const files = await listMarkdownFiles(dir);
       setFolderFiles((prev) => ({ ...prev, [id]: files }));
     }
     setExpanded((prev) => new Set([...prev, id]));
@@ -374,15 +398,19 @@ export default function EditorPage() {
   function startRename(key: string, currentName: string, e: React.MouseEvent) {
     e.stopPropagation();
     setRenamingKey(key);
-    setRenameValue(currentName.replace(/\.mdx$/, ""));
+    setRenameValue(stripMarkdownExtension(currentName));
   }
 
   async function commitRename() {
     if (!renamingKey || !renameValue.trim()) { setRenamingKey(null); return; }
-    const newName = renameValue.trim().endsWith(".mdx") ? renameValue.trim() : renameValue.trim() + ".mdx";
 
     if (renamingKey.includes(":")) {
       const [entryId, oldName] = renamingKey.split(":");
+      const explicitExtension = getMarkdownExtension(renameValue.trim());
+      const existingExtension = getMarkdownExtension(oldName);
+      const nextExtension = explicitExtension ?? existingExtension ?? ".mdx";
+      const baseName = explicitExtension ? stripMarkdownExtension(renameValue.trim()) : renameValue.trim();
+      const newName = `${baseName}${nextExtension}`;
       if (newName === oldName) { setRenamingKey(null); return; }
 
       const entry = entries.find((e) => e.id === entryId);
@@ -632,7 +660,7 @@ export default function EditorPage() {
                                     onClick={() => openFolderFile(filename, entry.id)}
                                     className={`w-full text-left pl-8 pr-14 py-1.5 text-sm truncate hover:bg-gray-50 dark:hover:bg-[#121212] ${isSelected ? "bg-gray-100 dark:bg-[#1a1a1a] font-medium" : ""}`}
                                   >
-                                    {filename.replace(".mdx", "")}
+                                    {stripMarkdownExtension(filename)}
                                     {fileHasProfile && <span className="ml-1.5 text-[10px] px-1 py-0.5 rounded bg-gray-100 dark:bg-[#1a1a1a] text-gray-600 dark:text-[#cecece] font-mono leading-none">css</span>}
                                   </button>
                                   <button
@@ -655,7 +683,7 @@ export default function EditorPage() {
                           );
                         })}
                         {(folderFiles[entry.id] ?? []).length === 0 && (
-                          <li className="pl-8 pr-3 py-1.5 text-xs text-gray-400 dark:text-[#737373]">No .mdx files</li>
+                          <li className="pl-8 pr-3 py-1.5 text-xs text-gray-400 dark:text-[#737373]">No .md/.mdx files</li>
                         )}
                       </ul>
                     )}
