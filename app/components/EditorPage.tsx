@@ -634,6 +634,18 @@ export default function EditorPage() {
         if (!entry || entry.kind !== "directory") { setRenamingKey(null); return; }
         const dir = entry.handle as FileSystemDirectoryHandle;
 
+        try {
+          await dir.getFileHandle(newName);
+          setNotice({
+            title: "Rename Blocked",
+            message: `A file named "${newName}" already exists. Choose a different name.`,
+          });
+          toast.error("Rename blocked", `A file named "${newName}" already exists.`);
+          return;
+        } catch (error) {
+          if (!isNotFoundError(error)) throw error;
+        }
+
         const oldHandle = await dir.getFileHandle(oldName);
         const file = await oldHandle.getFile();
         const fileContent = await file.text();
