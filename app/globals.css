@@ -112,12 +112,26 @@ body {
   scrollbar-color: var(--sidebar-scroll-thumb) var(--sidebar-scroll-track);
 }
 
+.editor-scroll-area {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sidebar-scroll-thumb) var(--sidebar-scroll-track);
+}
+
 .sidebar-scroll-area::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
+.editor-scroll-area::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
 .sidebar-scroll-area::-webkit-scrollbar-track {
+  background: var(--sidebar-scroll-track);
+}
+
+.editor-scroll-area::-webkit-scrollbar-track {
   background: var(--sidebar-scroll-track);
 }
 
@@ -127,6 +141,16 @@ body {
   border: 2px solid var(--sidebar-scroll-track);
 }
 
+.editor-scroll-area::-webkit-scrollbar-thumb {
+  background: var(--sidebar-scroll-thumb);
+  border-radius: 9999px;
+  border: 2px solid var(--sidebar-scroll-track);
+}
+
 .sidebar-scroll-area::-webkit-scrollbar-thumb:hover {
+  background: var(--sidebar-scroll-thumb-hover);
+}
+
+.editor-scroll-area::-webkit-scrollbar-thumb:hover {
   background: var(--sidebar-scroll-thumb-hover);
 }
