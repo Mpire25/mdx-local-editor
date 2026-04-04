@@ -138,6 +138,7 @@ const STORAGE_KEY = "mdx-editor-workspace";
 const CSS_PROFILES_KEY = "mdx-editor-css-profiles";
 const DEFAULT_CSS_KEY = "mdx-editor-default-css";
 const THEME_KEY = "mdx-editor-theme";
+const AUTOSAVE_KEY = "mdx-editor-autosave";
 
 function getMarkdownExtension(filename: string): ".md" | ".mdx" | null {
   const lowered = filename.toLowerCase();
@@ -208,6 +209,8 @@ export default function EditorPage() {
   const [saved, setSaved] = useState(false);
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [theme, setTheme] = useState<Theme>("light");
+  const [autosave, setAutosave] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [notice, setNotice] = useState<Notice>(null);
   const [saveTooltip, setSaveTooltip] = useState<SaveTooltip>(null);
@@ -220,6 +223,7 @@ export default function EditorPage() {
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editingLabel, setEditingLabel] = useState("");
   const [editingValue, setEditingValue] = useState("");
+  const [cssOpenedFromSettings, setCssOpenedFromSettings] = useState(false);
 
   // Rename
   const [renamingKey, setRenamingKey] = useState<string | null>(null);
@@ -240,6 +244,9 @@ export default function EditorPage() {
       setTheme(savedTheme);
     }
 
+    const savedAutosave = localStorage.getItem(AUTOSAVE_KEY);
+    if (savedAutosave === "false") setAutosave(false);
+
     Promise.all([
       get<StoredEntry[]>(STORAGE_KEY),
       get<Record<string, string>>(CSS_PROFILES_KEY),
@@ -258,6 +265,14 @@ export default function EditorPage() {
     document.documentElement.classList.toggle("dark", theme === "dark");
     localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem(AUTOSAVE_KEY, String(autosave));
+    if (!autosave && saveTimeout.current) {
+      clearTimeout(saveTimeout.current);
+      saveTimeout.current = null;
+    }
+  }, [autosave]);
 
   useEffect(() => {
     if (renamingKey) renameInputRef.current?.focus();
@@ -462,7 +477,9 @@ export default function EditorPage() {
     if (savedIndicatorTimeout.current) clearTimeout(savedIndicatorTimeout.current);
     setSaved(false);
     if (saveTimeout.current) clearTimeout(saveTimeout.current);
-    saveTimeout.current = setTimeout(() => autoSave(value), 1500);
+    if (autosave) {
+      saveTimeout.current = setTimeout(() => autoSave(value), 1500);
+    }
   }
 
   function showSavedIndicator() {
@@ -700,6 +717,14 @@ export default function EditorPage() {
     setEditingValue(key === "default" ? defaultCss : (cssProfiles[key] ?? ""));
   }
 
+  function closeCssEditor() {
+    setEditingKey(null);
+    if (cssOpenedFromSettings) {
+      setCssOpenedFromSettings(false);
+      setShowSettings(true);
+    }
+  }
+
   async function saveProfile() {
     if (editingKey === null) return;
     try {
@@ -713,7 +738,7 @@ export default function EditorPage() {
         await persistProfiles(next);
         toast.success("CSS profile saved");
       }
-      setEditingKey(null);
+      closeCssEditor();
     } catch (error) {
       console.error("CSS save failed:", error);
       toast.error("CSS save failed", "Could not save this CSS profile.");
@@ -730,7 +755,7 @@ export default function EditorPage() {
         delete next[editingKey];
         await persistProfiles(next);
       }
-      setEditingKey(null);
+      closeCssEditor();
       toast.info("CSS profile cleared");
     } catch (error) {
       console.error("CSS clear failed:", error);
@@ -787,12 +812,79 @@ export default function EditorPage() {
         </div>
       )}
 
+      {/* ── Settings Modal ───────────────────────────────────────────────── */}
+      {showSettings && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-8"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setShowSettings(false);
+          }}
+        >
+          <div className="bg-white dark:bg-black rounded-lg shadow-xl w-full max-w-sm flex flex-col overflow-hidden border border-gray-200 dark:border-[#2a2a2a]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-[#2a2a2a] shrink-0">
+              <p className="text-sm font-medium">Settings</p>
+              <button onClick={() => setShowSettings(false)} aria-label="Close settings" className="text-gray-400 hover:text-gray-700 dark:hover:text-[#f1f1f1] text-lg leading-none px-1">✕</button>
+            </div>
+            <div className="divide-y divide-gray-100 dark:divide-[#1f1f1f]">
+              {/* Theme */}
+              <div className="flex items-center justify-between px-5 py-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-[#f1f1f1]">Appearance</p>
+                  <p className="text-xs text-gray-400 dark:text-[#9a9a9a] mt-0.5">Light or dark mode</p>
+                </div>
+                <button
+                  onClick={() => setTheme((t) => t === "light" ? "dark" : "light")}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded border border-gray-200 dark:border-[#2f2f2f] bg-white dark:bg-[#111111] hover:bg-gray-50 dark:hover:bg-[#1a1a1a] text-sm text-gray-700 dark:text-[#e5e5e5]"
+                >
+                  <span>{theme === "light" ? "☽" : "☀"}</span>
+                  <span>{theme === "light" ? "Dark" : "Light"}</span>
+                </button>
+              </div>
+              {/* Default CSS */}
+              <div className="flex items-center justify-between px-5 py-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-[#f1f1f1]">Default CSS</p>
+                  <p className="text-xs text-gray-400 dark:text-[#9a9a9a] mt-0.5">Global fallback style</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setCssOpenedFromSettings(true);
+                    setShowSettings(false);
+                    openEditor("default", "Global default");
+                  }}
+                  className={`px-3 py-1.5 rounded border text-sm ${defaultCss ? "border-gray-200 dark:border-[#2f2f2f] bg-white dark:bg-[#111111] hover:bg-gray-50 dark:hover:bg-[#1a1a1a] text-gray-700 dark:text-[#e5e5e5]" : "border-gray-200 dark:border-[#2f2f2f] bg-white dark:bg-[#111111] hover:bg-gray-50 dark:hover:bg-[#1a1a1a] text-gray-400 dark:text-[#9a9a9a]"}`}
+                >
+                  {defaultCss ? "Edit" : "Set up"}
+                </button>
+              </div>
+              {/* Autosave */}
+              <div className="flex items-center justify-between px-5 py-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-[#f1f1f1]">Autosave</p>
+                  <p className="text-xs text-gray-400 dark:text-[#9a9a9a] mt-0.5">Save 1.5s after typing stops</p>
+                </div>
+                <button
+                  onClick={() => setAutosave((v) => !v)}
+                  role="switch"
+                  aria-checked={autosave}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${autosave ? "bg-gray-900 dark:bg-[#f1f1f1]" : "bg-gray-200 dark:bg-[#333333]"}`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white dark:bg-black shadow transform transition-transform ${autosave ? "translate-x-4" : "translate-x-0"}`}
+                  />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── CSS Profile Editor Modal ──────────────────────────────────────── */}
       {editingKey !== null && (
         <div
           className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-8"
           onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setEditingKey(null);
+            if (e.target === e.currentTarget) closeCssEditor();
           }}
         >
           <div className="bg-white dark:bg-black rounded-lg shadow-xl w-full max-w-2xl flex flex-col overflow-hidden border border-gray-200 dark:border-[#2a2a2a]">
@@ -803,7 +895,7 @@ export default function EditorPage() {
                 </p>
                 <p className="text-xs text-gray-400 dark:text-[#9a9a9a] mt-0.5">{editingLabel}</p>
               </div>
-              <button onClick={() => setEditingKey(null)} aria-label="Close CSS editor" className="text-gray-400 hover:text-gray-700 dark:hover:text-[#f1f1f1] text-lg leading-none px-1">✕</button>
+              <button onClick={closeCssEditor} aria-label="Close CSS editor" className="text-gray-400 hover:text-gray-700 dark:hover:text-[#f1f1f1] text-lg leading-none px-1">✕</button>
             </div>
             <p className="px-5 py-2 text-xs text-gray-400 dark:text-[#9a9a9a] bg-gray-50 dark:bg-[#0f0f0f] border-b border-gray-100 dark:border-[#2a2a2a] shrink-0">
               Target the editor content with <code className="font-mono bg-gray-100 dark:bg-[#1a1a1a] px-1 rounded">.mdx-content</code> — e.g. <code className="font-mono bg-gray-100 dark:bg-[#1a1a1a] px-1 rounded">.mdx-content h1 {"{ color: red; }"}</code>
@@ -841,21 +933,12 @@ export default function EditorPage() {
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-[#242424]">
           <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-[#a2a2a2]">Files</span>
           <div className="flex items-center gap-1">
-            {/* Theme toggle */}
+            {/* Settings */}
             <button
-              onClick={() => setTheme((t) => t === "light" ? "dark" : "light")}
+              onClick={() => setShowSettings(true)}
               className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-[#171717] text-gray-400 dark:text-[#8d8d8d] hover:text-gray-700 dark:hover:text-[#e8e8e8] text-sm"
-              title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
-              aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
-            >
-              {theme === "light" ? "☽" : "☀"}
-            </button>
-            {/* Default CSS */}
-            <button
-              onClick={() => openEditor("default", "Global default")}
-              className={`w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-[#171717] text-sm ${defaultCss ? "text-gray-700 dark:text-[#f1f1f1]" : "text-gray-400 dark:text-[#8d8d8d] hover:text-gray-700 dark:hover:text-[#e8e8e8]"}`}
-              title="Edit default CSS profile"
-              aria-label="Edit default CSS profile"
+              title="Settings"
+              aria-label="Open settings"
             >
               ⚙
             </button>
