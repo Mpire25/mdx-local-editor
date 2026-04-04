@@ -315,7 +315,9 @@ export default function EditorPage() {
       setFolderFiles((prev) => ({ ...prev, [entry.id]: files }));
       setExpanded((prev) => new Set([...prev, entry.id]));
       await persistEntries([...entries, entry]);
-    } catch { /* cancelled */ }
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) throw error;
+    }
   }
 
   async function addFile() {
@@ -341,7 +343,9 @@ export default function EditorPage() {
       });
       const entry: StoredEntry = { id: crypto.randomUUID(), kind: "file", handle, name: handle.name };
       await persistEntries([...entries, entry]);
-    } catch { /* cancelled */ }
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) throw error;
+    }
   }
 
   function removeEntry(id: string) {
