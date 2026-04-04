@@ -799,7 +799,7 @@ export default function EditorPage() {
                 </p>
                 <p className="text-xs text-gray-400 dark:text-[#9a9a9a] mt-0.5">{editingLabel}</p>
               </div>
-              <button onClick={() => setEditingKey(null)} className="text-gray-400 hover:text-gray-700 dark:hover:text-[#f1f1f1] text-lg leading-none px-1">✕</button>
+              <button onClick={() => setEditingKey(null)} aria-label="Close CSS editor" className="text-gray-400 hover:text-gray-700 dark:hover:text-[#f1f1f1] text-lg leading-none px-1">✕</button>
             </div>
             <p className="px-5 py-2 text-xs text-gray-400 dark:text-[#9a9a9a] bg-gray-50 dark:bg-[#0f0f0f] border-b border-gray-100 dark:border-[#2a2a2a] shrink-0">
               Target the editor content with <code className="font-mono bg-gray-100 dark:bg-[#1a1a1a] px-1 rounded">.mdx-content</code> — e.g. <code className="font-mono bg-gray-100 dark:bg-[#1a1a1a] px-1 rounded">.mdx-content h1 {"{ color: red; }"}</code>
@@ -842,6 +842,7 @@ export default function EditorPage() {
               onClick={() => setTheme((t) => t === "light" ? "dark" : "light")}
               className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-[#171717] text-gray-400 dark:text-[#8d8d8d] hover:text-gray-700 dark:hover:text-[#e8e8e8] text-sm"
               title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+              aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
             >
               {theme === "light" ? "☽" : "☀"}
             </button>
@@ -850,6 +851,7 @@ export default function EditorPage() {
               onClick={() => openEditor("default", "Global default")}
               className={`w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-[#171717] text-sm ${defaultCss ? "text-gray-700 dark:text-[#f1f1f1]" : "text-gray-400 dark:text-[#8d8d8d] hover:text-gray-700 dark:hover:text-[#e8e8e8]"}`}
               title="Edit default CSS profile"
+              aria-label="Edit default CSS profile"
             >
               ⚙
             </button>
@@ -859,6 +861,8 @@ export default function EditorPage() {
                 onClick={() => setShowAddMenu((v) => !v)}
                 className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-[#171717] text-gray-500 dark:text-[#a2a2a2] hover:text-gray-800 dark:hover:text-[#f1f1f1] text-lg leading-none"
                 title="Add folder or file"
+                aria-label="Add folder or file"
+                aria-expanded={showAddMenu}
               >
                 +
               </button>
@@ -905,6 +909,7 @@ export default function EditorPage() {
                       <button
                         onClick={(e) => { e.stopPropagation(); openEditor(entry.id, entry.name); }}
                         title="Edit CSS profile"
+                        aria-label={`Edit CSS profile for ${entry.name}`}
                         className={`opacity-0 group-hover:opacity-100 shrink-0 px-1 py-1 text-xs ${hasProfile ? "text-gray-500 dark:text-[#8d8d8d] hover:text-gray-700 dark:hover:text-[#f1f1f1]" : "text-gray-300 dark:text-[#555555] hover:text-gray-500 dark:hover:text-[#bcbcbc]"}`}
                       >
                         ◈
@@ -913,6 +918,7 @@ export default function EditorPage() {
                         onClick={() => removeEntry(entry.id)}
                         className="opacity-0 group-hover:opacity-100 shrink-0 px-1.5 py-1 text-gray-300 dark:text-[#555555] hover:text-red-400 text-xs"
                         title="Remove from sidebar"
+                        aria-label={`Remove ${entry.name} from sidebar`}
                       >
                         ✕
                       </button>
@@ -953,6 +959,7 @@ export default function EditorPage() {
                                   <button
                                     onClick={(e) => { e.stopPropagation(); openEditor(fileProfileKey, `${entry.name} / ${filename}`); }}
                                     title="Edit file CSS profile"
+                                    aria-label={`Edit CSS profile for ${filename}`}
                                     className={`absolute right-6 top-1/2 -translate-y-1/2 opacity-0 group-hover/file:opacity-100 text-xs px-1 ${fileHasProfile ? "text-gray-500 dark:text-[#8d8d8d] hover:text-gray-700 dark:hover:text-[#f1f1f1]" : "text-gray-300 dark:text-[#555555] hover:text-gray-500 dark:hover:text-[#bcbcbc]"}`}
                                   >
                                     ◈
@@ -960,6 +967,7 @@ export default function EditorPage() {
                                   <button
                                     onClick={(e) => startRename(renameKey, filename, e)}
                                     title="Rename"
+                                    aria-label={`Rename ${filename}`}
                                     className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/file:opacity-100 text-gray-400 dark:text-[#737373] hover:text-gray-700 dark:hover:text-[#d8d8d8] text-xs px-1"
                                   >
                                     ✎
@@ -990,6 +998,7 @@ export default function EditorPage() {
             onClick={() => setSidebarOpen(true)}
             className="absolute left-3 top-2 z-10 w-6 h-6 flex items-center justify-center rounded border border-gray-200 dark:border-[#2a2a2a] bg-white dark:bg-black text-gray-500 dark:text-[#a2a2a2] hover:text-gray-800 dark:hover:text-[#f1f1f1] hover:bg-gray-50 dark:hover:bg-[#171717]"
             title="Open sidebar"
+            aria-label="Open sidebar"
           >
             ▶
           </button>
@@ -1002,6 +1011,7 @@ export default function EditorPage() {
                   onClick={() => setSidebarOpen((v) => !v)}
                   className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-[#171717] text-gray-500 dark:text-[#a2a2a2] hover:text-gray-800 dark:hover:text-[#f1f1f1] text-sm shrink-0"
                   title={sidebarOpen ? "Close sidebar" : "Open sidebar"}
+                  aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
                 >
                   {sidebarOpen ? "◀" : "▶"}
                 </button>
