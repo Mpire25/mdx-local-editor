@@ -152,6 +152,10 @@ function stripMarkdownExtension(filename: string): string {
   return ext ? filename.slice(0, -ext.length) : filename;
 }
 
+function isNotFoundError(error: unknown): error is DOMException {
+  return error instanceof DOMException && error.name === "NotFoundError";
+}
+
 async function listMarkdownFiles(dir: FileSystemDirectoryHandle): Promise<string[]> {
   const names: string[] = [];
   const iterable = dir as unknown as AsyncIterable<[string, FileSystemHandle]>;
@@ -324,6 +328,19 @@ export default function EditorPage() {
     setExpanded((prev) => { const s = new Set(prev); s.delete(id); return s; });
   }
 
+  function removeMissingFolderFile(entryId: string, filename: string) {
+    setFolderFiles((prev) => ({
+      ...prev,
+      [entryId]: (prev[entryId] ?? []).filter((file) => file !== filename),
+    }));
+    if (selected?.entryId === entryId && selected.name === filename) {
+      setSelected(null);
+      setContent("");
+      pendingContent.current = "";
+      setSaved(false);
+    }
+  }
+
   // ─── Folder expand ──────────────────────────────────────────────────────
 
   async function toggleFolder(entry: StoredEntry) {
@@ -340,8 +357,17 @@ export default function EditorPage() {
 
     if (!folderFiles[id]) {
       setFolderFiles((prev) => ({ ...prev, [id]: [] }));
-      const files = await listMarkdownFiles(dir);
-      setFolderFiles((prev) => ({ ...prev, [id]: files }));
+      try {
+        const files = await listMarkdownFiles(dir);
+        setFolderFiles((prev) => ({ ...prev, [id]: files }));
+      } catch (error) {
+        if (isNotFoundError(error)) {
+          removeEntry(id);
+          alert(`"${entry.name}" is no longer available and was removed from the sidebar.`);
+          return;
+        }
+        throw error;
+      }
     }
     setExpanded((prev) => new Set([...prev, id]));
   }
@@ -353,22 +379,44 @@ export default function EditorPage() {
     entryId: string,
     dirHandle?: FileSystemDirectoryHandle,
   ) {
-    const perm = await (fileHandle as unknown as FSHandleWithPermission).requestPermission({ mode: "readwrite" });
-    if (perm !== "granted") return;
-    const file = await fileHandle.getFile();
-    const text = await file.text();
-    setContent(text);
-    pendingContent.current = text;
-    setSaved(false);
-    setSelected({ fileHandle, dirHandle, entryId, name: fileHandle.name });
+    try {
+      const perm = await (fileHandle as unknown as FSHandleWithPermission).requestPermission({ mode: "readwrite" });
+      if (perm !== "granted") return;
+      const file = await fileHandle.getFile();
+      const text = await file.text();
+      setContent(text);
+      pendingContent.current = text;
+      setSaved(false);
+      setSelected({ fileHandle, dirHandle, entryId, name: fileHandle.name });
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        if (dirHandle) {
+          removeMissingFolderFile(entryId, fileHandle.name);
+        } else {
+          removeEntry(entryId);
+        }
+        alert(`"${fileHandle.name}" could not be found and was removed from the sidebar.`);
+        return;
+      }
+      throw error;
+    }
   }
 
   async function openFolderFile(filename: string, entryId: string) {
     const entry = entries.find((e) => e.id === entryId);
     if (!entry || entry.kind !== "directory") return;
     const dir = entry.handle as FileSystemDirectoryHandle;
-    const fileHandle = await dir.getFileHandle(filename);
-    await openFileHandle(fileHandle, entryId, dir);
+    try {
+      const fileHandle = await dir.getFileHandle(filename);
+      await openFileHandle(fileHandle, entryId, dir);
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        removeMissingFolderFile(entryId, filename);
+        alert(`"${filename}" no longer exists and was removed from the list.`);
+        return;
+      }
+      throw error;
+    }
   }
 
   // ─── Saving ─────────────────────────────────────────────────────────────
@@ -388,6 +436,17 @@ export default function EditorPage() {
       await writable.write(value);
       await writable.close();
       setSaved(true);
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        if (selected.dirHandle) {
+          removeMissingFolderFile(selected.entryId, selected.name);
+        } else {
+          removeEntry(selected.entryId);
+        }
+        alert(`"${selected.name}" no longer exists. It was removed from the sidebar.`);
+        return;
+      }
+      throw error;
     } finally {
       setSaving(false);
     }
