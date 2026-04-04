@@ -164,6 +164,14 @@ function resolveProfile(
   return { css: theme === "dark" ? BUILT_IN_DARK : BUILT_IN_LIGHT, source: "built-in" };
 }
 
+function getSelectedFileStorageKey(selected: SelectedFile | null, entries: StoredEntry[]) {
+  if (!selected) return undefined;
+
+  const entry = entries.find((e) => e.id === selected.entryId);
+  const inFolder = entry?.kind === "directory";
+  return inFolder ? `${selected.entryId}:${selected.name}` : selected.entryId;
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function EditorPage() {
@@ -446,6 +454,7 @@ export default function EditorPage() {
       ? `${selectedEntry.name} / ${selected.name}`
       : selected.name
     : "";
+  const selectedFileStorageKey = getSelectedFileStorageKey(selected, entries);
 
   const sourceBadge: Record<ProfileSource, { label: string; className: string }> = {
     file:      { label: "file css",    className: "bg-gray-100 text-gray-600 dark:bg-[#121212] dark:text-[#d0d0d0]" },
@@ -701,6 +710,7 @@ export default function EditorPage() {
                 css={resolvedCss}
                 usingCustomCss={isCustomCss}
                 theme={theme}
+                widthStorageKey={selectedFileStorageKey}
               />
             </div>
           </>

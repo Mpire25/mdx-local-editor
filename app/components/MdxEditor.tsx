@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import "@mdxeditor/editor/style.css";
 import {
   MDXEditor,
@@ -42,6 +42,29 @@ interface Props {
   css?: string;
   usingCustomCss?: boolean;
   theme?: "light" | "dark";
+  widthStorageKey?: string;
+}
+
+const MIN_EDITOR_WIDTH = 300;
+const WIDTH_STORAGE_PREFIX = "mdx-editor-max-width";
+
+function getStoredMaxWidth(widthStorageKey?: string) {
+  if (!widthStorageKey || typeof window === "undefined") return "";
+  return localStorage.getItem(`${WIDTH_STORAGE_PREFIX}:${widthStorageKey}`) ?? "";
+}
+
+function applyMaxWidth(shell: HTMLDivElement | null, value: string) {
+  if (!shell) return;
+
+  if (!value) {
+    shell.style.removeProperty("--mdx-rich-max-width");
+    return;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return;
+
+  shell.style.setProperty("--mdx-rich-max-width", `${Math.max(MIN_EDITOR_WIDTH, parsed)}px`);
 }
 
 export default function MdxEditor({
@@ -50,8 +73,10 @@ export default function MdxEditor({
   css,
   usingCustomCss = false,
   theme = "light",
+  widthStorageKey,
 }: Props) {
   const shellRef = useRef<HTMLDivElement>(null);
+  const [maxWidthInput, setMaxWidthInput] = useState(() => getStoredMaxWidth(widthStorageKey));
 
   const themeClass = theme === "dark" ? "dark" : "light";
   const contentClassName = [
@@ -61,6 +86,25 @@ export default function MdxEditor({
   ]
     .filter(Boolean)
     .join(" ");
+
+  useEffect(() => {
+    applyMaxWidth(shellRef.current, maxWidthInput);
+  }, [maxWidthInput]);
+
+  function updateMaxWidth(nextValue: string) {
+    setMaxWidthInput(nextValue);
+    applyMaxWidth(shellRef.current, nextValue);
+
+    if (!widthStorageKey) return;
+
+    const storageId = `${WIDTH_STORAGE_PREFIX}:${widthStorageKey}`;
+    if (!nextValue) {
+      localStorage.removeItem(storageId);
+      return;
+    }
+
+    localStorage.setItem(storageId, nextValue);
+  }
 
   return (
     <div ref={shellRef} className={`${themeClass} mdx-editor-shell`}>
@@ -302,25 +346,16 @@ export default function MdxEditor({
                   <input
                     type="text"
                     inputMode="numeric"
+                    value={maxWidthInput}
                     onChange={(e) => {
                       const digitsOnly = e.target.value.replace(/\D+/g, "");
-                      if (digitsOnly !== e.target.value) e.target.value = digitsOnly;
-
-                      if (!digitsOnly) {
-                        shellRef.current?.style.removeProperty("--mdx-rich-max-width");
-                        return;
-                      }
-
-                      const parsed = Number.parseInt(digitsOnly, 10);
-                      if (!Number.isFinite(parsed)) return;
-                      const clamped = Math.max(300, parsed);
-                      shellRef.current?.style.setProperty("--mdx-rich-max-width", `${clamped}px`);
+                      updateMaxWidth(digitsOnly);
                     }}
                     onBlur={(e) => {
                       if (!e.target.value) return;
                       const parsed = Number.parseInt(e.target.value, 10);
                       if (!Number.isFinite(parsed)) return;
-                      if (parsed < 300) e.target.value = "300";
+                      if (parsed < MIN_EDITOR_WIDTH) updateMaxWidth(String(MIN_EDITOR_WIDTH));
                     }}
                     placeholder="px"
                     aria-label="Max content width in pixels"
