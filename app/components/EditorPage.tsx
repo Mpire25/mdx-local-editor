@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { get, set } from "idb-keyval";
+import { useToast } from "./ToastProvider";
 
 const MdxEditor = dynamic(() => import("./MdxEditor"), { ssr: false });
 
@@ -197,6 +198,7 @@ function getSelectedFileStorageKey(selected: SelectedFile | null, entries: Store
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function EditorPage() {
+  const toast = useToast();
   const [entries, setEntries] = useState<StoredEntry[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [folderFiles, setFolderFiles] = useState<Record<string, string[]>>({});
@@ -457,7 +459,7 @@ export default function EditorPage() {
     saveTimeout.current = setTimeout(() => autoSave(value), 1500);
   }
 
-  async function autoSave(value: string) {
+  async function autoSave(value: string, showSuccessToast = false) {
     if (!selected) return;
     setSaving(true);
     try {
@@ -465,6 +467,9 @@ export default function EditorPage() {
       await writable.write(value);
       await writable.close();
       setSaved(true);
+      if (showSuccessToast) {
+        toast.success("Saved", selected.name);
+      }
       if (savedIndicatorTimeout.current) clearTimeout(savedIndicatorTimeout.current);
       savedIndicatorTimeout.current = setTimeout(() => setSaved(false), 1500);
     } catch (error) {
@@ -492,7 +497,7 @@ export default function EditorPage() {
       clearTimeout(saveTimeout.current);
       saveTimeout.current = null;
     }
-    await autoSave(pendingContent.current);
+    await autoSave(pendingContent.current, true);
   }
 
   async function saveAs() {
@@ -538,12 +543,14 @@ export default function EditorPage() {
       await persistEntries(nextEntries);
       setSelected({ fileHandle: newHandle, entryId: nextEntry.id, name: newHandle.name });
       setSaved(true);
+      toast.success("Saved as new file", newHandle.name);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       setNotice({
         title: "Save As Failed",
         message: "Could not save a new file. Please try again.",
       });
+      toast.error("Save As failed", "Could not save a new file. Please try again.");
     }
   }
 
@@ -589,40 +596,45 @@ export default function EditorPage() {
 
   async function commitRename() {
     if (!renamingKey || !renameValue.trim()) { setRenamingKey(null); return; }
+    try {
+      if (renamingKey.includes(":")) {
+        const [entryId, oldName] = renamingKey.split(":");
+        const explicitExtension = getMarkdownExtension(renameValue.trim());
+        const existingExtension = getMarkdownExtension(oldName);
+        const nextExtension = explicitExtension ?? existingExtension ?? ".mdx";
+        const baseName = explicitExtension ? stripMarkdownExtension(renameValue.trim()) : renameValue.trim();
+        const newName = `${baseName}${nextExtension}`;
+        if (newName === oldName) { setRenamingKey(null); return; }
 
-    if (renamingKey.includes(":")) {
-      const [entryId, oldName] = renamingKey.split(":");
-      const explicitExtension = getMarkdownExtension(renameValue.trim());
-      const existingExtension = getMarkdownExtension(oldName);
-      const nextExtension = explicitExtension ?? existingExtension ?? ".mdx";
-      const baseName = explicitExtension ? stripMarkdownExtension(renameValue.trim()) : renameValue.trim();
-      const newName = `${baseName}${nextExtension}`;
-      if (newName === oldName) { setRenamingKey(null); return; }
+        const entry = entries.find((e) => e.id === entryId);
+        if (!entry || entry.kind !== "directory") { setRenamingKey(null); return; }
+        const dir = entry.handle as FileSystemDirectoryHandle;
 
-      const entry = entries.find((e) => e.id === entryId);
-      if (!entry || entry.kind !== "directory") { setRenamingKey(null); return; }
-      const dir = entry.handle as FileSystemDirectoryHandle;
+        const oldHandle = await dir.getFileHandle(oldName);
+        const file = await oldHandle.getFile();
+        const fileContent = await file.text();
+        const newHandle = await dir.getFileHandle(newName, { create: true });
+        const writable = await newHandle.createWritable();
+        await writable.write(fileContent);
+        await writable.close();
+        await dir.removeEntry(oldName);
 
-      const oldHandle = await dir.getFileHandle(oldName);
-      const file = await oldHandle.getFile();
-      const fileContent = await file.text();
-      const newHandle = await dir.getFileHandle(newName, { create: true });
-      const writable = await newHandle.createWritable();
-      await writable.write(fileContent);
-      await writable.close();
-      await dir.removeEntry(oldName);
+        setFolderFiles((prev) => ({
+          ...prev,
+          [entryId]: (prev[entryId] ?? []).map((f) => (f === oldName ? newName : f)).sort(),
+        }));
 
-      setFolderFiles((prev) => ({
-        ...prev,
-        [entryId]: (prev[entryId] ?? []).map((f) => (f === oldName ? newName : f)).sort(),
-      }));
+        if (selected?.entryId === entryId && selected.name === oldName) {
+          setSelected({ fileHandle: newHandle, dirHandle: dir, entryId, name: newName });
+        }
 
-      if (selected?.entryId === entryId && selected.name === oldName) {
-        setSelected({ fileHandle: newHandle, dirHandle: dir, entryId, name: newName });
+        toast.success("File renamed", `${oldName} -> ${newName}`);
       }
+    } catch {
+      toast.error("Rename failed", "Could not rename this file. Please try again.");
+    } finally {
+      setRenamingKey(null);
     }
-
-    setRenamingKey(null);
   }
 
   // ─── CSS profiles ────────────────────────────────────────────────────────
@@ -635,27 +647,38 @@ export default function EditorPage() {
 
   async function saveProfile() {
     if (editingKey === null) return;
-    if (editingKey === "default") {
-      await persistDefaultCss(editingValue);
-    } else {
-      const next = { ...cssProfiles };
-      if (editingValue.trim()) next[editingKey] = editingValue;
-      else delete next[editingKey];
-      await persistProfiles(next);
+    try {
+      if (editingKey === "default") {
+        await persistDefaultCss(editingValue);
+        toast.success("Default CSS profile saved");
+      } else {
+        const next = { ...cssProfiles };
+        if (editingValue.trim()) next[editingKey] = editingValue;
+        else delete next[editingKey];
+        await persistProfiles(next);
+        toast.success("CSS profile saved");
+      }
+      setEditingKey(null);
+    } catch {
+      toast.error("CSS save failed", "Could not save this CSS profile.");
     }
-    setEditingKey(null);
   }
 
   async function clearProfile() {
     if (editingKey === null) return;
-    if (editingKey === "default") {
-      await persistDefaultCss("");
-    } else {
-      const next = { ...cssProfiles };
-      delete next[editingKey];
-      await persistProfiles(next);
+    try {
+      if (editingKey === "default") {
+        await persistDefaultCss("");
+      } else {
+        const next = { ...cssProfiles };
+        delete next[editingKey];
+        await persistProfiles(next);
+      }
+      setEditingKey(null);
+      toast.info("CSS profile cleared");
+    } catch {
+      toast.error("CSS clear failed", "Could not clear this CSS profile.");
     }
-    setEditingKey(null);
   }
 
   // ─── Derived ────────────────────────────────────────────────────────────
