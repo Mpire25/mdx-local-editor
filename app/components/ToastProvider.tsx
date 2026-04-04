@@ -25,16 +25,10 @@ type ToastApi = {
 
 const ToastContext = createContext<ToastApi | null>(null);
 
-function toneClass(tone: ToastTone): string {
-  if (tone === "success") {
-    return "border-emerald-200/85 bg-emerald-50/90 text-emerald-950 dark:border-emerald-900/70 dark:bg-emerald-950/25 dark:text-emerald-100";
-  }
-
-  if (tone === "error") {
-    return "border-red-200/85 bg-red-50/90 text-red-950 dark:border-red-900/70 dark:bg-red-950/25 dark:text-red-100";
-  }
-
-  return "border-gray-200/90 bg-white/95 text-gray-900 dark:border-[#2a2a2a] dark:bg-[#080808]/96 dark:text-[#ececec]";
+function toneBar(tone: ToastTone): string {
+  if (tone === "success") return "bg-emerald-500";
+  if (tone === "error") return "bg-red-500";
+  return "bg-gray-300 dark:bg-gray-600";
 }
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -88,14 +82,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className={`pointer-events-auto rounded-xl border px-3.5 py-2.5 shadow-lg backdrop-blur-sm ${toneClass(toast.tone)}`}
+            className="pointer-events-auto flex overflow-hidden rounded-lg border border-gray-200/90 dark:border-[#2a2a2a] bg-white dark:bg-[#0a0a0a] shadow-md"
             role="status"
             aria-live={toast.tone === "error" ? "assertive" : "polite"}
           >
-            <p className="text-sm font-semibold tracking-tight leading-snug">{toast.title}</p>
-            {toast.message && (
-              <p className="mt-1 text-xs leading-relaxed opacity-90">{toast.message}</p>
-            )}
+            <span className={`w-1 shrink-0 ${toneBar(toast.tone)}`} />
+            <div className="px-3.5 py-2.5">
+              <p className="text-sm text-gray-900 dark:text-[#ececec] leading-snug">{toast.title}</p>
+              {toast.message && (
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-[#888] leading-relaxed">{toast.message}</p>
+              )}
+            </div>
           </div>
         ))}
       </div>
