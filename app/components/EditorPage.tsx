@@ -228,6 +228,7 @@ export default function EditorPage() {
   const saveTooltipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingContent = useRef("");
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savedIndicatorTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ─── Init ───────────────────────────────────────────────────────────────
 
@@ -271,6 +272,7 @@ export default function EditorPage() {
   useEffect(() => {
     return () => {
       if (saveTooltipTimeoutRef.current) clearTimeout(saveTooltipTimeoutRef.current);
+      if (savedIndicatorTimeout.current) clearTimeout(savedIndicatorTimeout.current);
     };
   }, []);
 
@@ -449,6 +451,7 @@ export default function EditorPage() {
 
   function handleChange(value: string) {
     pendingContent.current = value;
+    if (savedIndicatorTimeout.current) clearTimeout(savedIndicatorTimeout.current);
     setSaved(false);
     if (saveTimeout.current) clearTimeout(saveTimeout.current);
     saveTimeout.current = setTimeout(() => autoSave(value), 1500);
@@ -462,6 +465,8 @@ export default function EditorPage() {
       await writable.write(value);
       await writable.close();
       setSaved(true);
+      if (savedIndicatorTimeout.current) clearTimeout(savedIndicatorTimeout.current);
+      savedIndicatorTimeout.current = setTimeout(() => setSaved(false), 1500);
     } catch (error) {
       if (isNotFoundError(error)) {
         if (selected.dirHandle) {
@@ -927,6 +932,7 @@ export default function EditorPage() {
                 <span className="truncate">{selectedDisplayName}</span>
               </div>
               <div className="flex items-center gap-2">
+                <span className="min-w-12 text-right">{saving ? "Saving…" : saved ? "Saved" : ""}</span>
                 <div className="relative">
                   <button
                     onClick={() => void manualSave()}
@@ -940,7 +946,7 @@ export default function EditorPage() {
                     Save
                   </button>
                   {saveTooltip === "save" && (
-                    <span className="absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap px-1.5 py-0.5 rounded text-[10px] font-mono bg-gray-900 text-white dark:bg-[#e8e8e8] dark:text-black shadow-lg z-20">
+                    <span className="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap px-1.5 py-0.5 rounded text-[10px] font-mono bg-gray-900 text-white dark:bg-[#e8e8e8] dark:text-black shadow-lg z-20">
                       Ctrl/Cmd+S
                     </span>
                   )}
@@ -958,7 +964,7 @@ export default function EditorPage() {
                     Save As
                   </button>
                   {saveTooltip === "saveAs" && (
-                    <span className="absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap px-1.5 py-0.5 rounded text-[10px] font-mono bg-gray-900 text-white dark:bg-[#e8e8e8] dark:text-black shadow-lg z-20">
+                    <span className="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap px-1.5 py-0.5 rounded text-[10px] font-mono bg-gray-900 text-white dark:bg-[#e8e8e8] dark:text-black shadow-lg z-20">
                       Ctrl/Cmd+Shift+S
                     </span>
                   )}
@@ -966,7 +972,6 @@ export default function EditorPage() {
                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${sourceBadge[profileSource].className}`}>
                   {sourceBadge[profileSource].label}
                 </span>
-                <span>{saving ? "Saving…" : saved ? "Saved" : ""}</span>
               </div>
             </div>
             <div
