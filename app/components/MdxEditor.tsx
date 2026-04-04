@@ -297,7 +297,7 @@ export default function MdxEditor({
                 <InsertThematicBreak />
                 <InsertCodeBlock />
                 <Separator />
-                <label className="ml-1 inline-flex items-center gap-1 text-[11px] text-gray-600 dark:text-[#a8a8a8]">
+                <label className="ml-1 mr-[5px] inline-flex items-center gap-1 text-[11px] text-gray-600 dark:text-[#a8a8a8]">
                   <span>Max width</span>
                   <input
                     type="text"

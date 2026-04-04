@@ -50,6 +50,33 @@ body {
   scrollbar-color: var(--sidebar-scroll-thumb) var(--sidebar-scroll-track);
 }
 
+.mdx-editor-shell .mdxeditor [class*="_diffSourceToggleWrapper_"]::before {
+  content: '';
+  position: absolute;
+  right: 100%;
+  top: 0;
+  bottom: 0;
+  width: 30px;
+  background: linear-gradient(to right, transparent, var(--baseBg));
+  pointer-events: none;
+}
+
+.mdx-editor-shell .mdxeditor [class*="_diffSourceToggleWrapper_"] {
+  z-index: 2;
+  background: var(--baseBg);
+  padding-left: 0px;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  margin-top: -0.375rem;
+  margin-bottom: -0.375rem;
+  margin-right: -0.375rem;
+  padding-top: 0.375rem;
+  padding-bottom: 0.375rem;
+  padding-right: 0.375rem;
+  right: -0.375rem;
+}
+
 .mdx-editor-shell .mdxeditor [class*="_toolbarRoot_"]::-webkit-scrollbar,
 .mdx-editor-shell .mdxeditor .mdxeditor-toolbar::-webkit-scrollbar {
   width: 8px;
