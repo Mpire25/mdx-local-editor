@@ -660,6 +660,15 @@ export default function EditorPage() {
           [entryId]: (prev[entryId] ?? []).map((f) => (f === oldName ? newName : f)).sort(),
         }));
 
+        const oldProfileKey = `${entryId}:${oldName}`;
+        const newProfileKey = `${entryId}:${newName}`;
+        if (cssProfiles[oldProfileKey] !== undefined) {
+          const nextProfiles = { ...cssProfiles };
+          nextProfiles[newProfileKey] = nextProfiles[oldProfileKey];
+          delete nextProfiles[oldProfileKey];
+          await persistProfiles(nextProfiles);
+        }
+
         if (selected?.entryId === entryId && selected.name === oldName) {
           setSelected({ fileHandle: newHandle, dirHandle: dir, entryId, name: newName });
         }
