@@ -576,6 +576,7 @@ export default function EditorPage() {
       toast.success("Saved as new file", newHandle.name);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
+      console.error("Save As failed:", error);
       setNotice({
         title: "Save As Failed",
         message: "Could not save a new file. Please try again.",
@@ -683,7 +684,8 @@ export default function EditorPage() {
 
         toast.success("File renamed", `${oldName} -> ${newName}`);
       }
-    } catch {
+    } catch (error) {
+      console.error("Rename failed:", error);
       toast.error("Rename failed", "Could not rename this file. Please try again.");
     } finally {
       setRenamingKey(null);
@@ -712,7 +714,8 @@ export default function EditorPage() {
         toast.success("CSS profile saved");
       }
       setEditingKey(null);
-    } catch {
+    } catch (error) {
+      console.error("CSS save failed:", error);
       toast.error("CSS save failed", "Could not save this CSS profile.");
     }
   }
@@ -729,7 +732,8 @@ export default function EditorPage() {
       }
       setEditingKey(null);
       toast.info("CSS profile cleared");
-    } catch {
+    } catch (error) {
+      console.error("CSS clear failed:", error);
       toast.error("CSS clear failed", "Could not clear this CSS profile.");
     }
   }
