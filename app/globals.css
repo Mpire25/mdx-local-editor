@@ -154,3 +154,27 @@ body {
 .editor-scroll-area::-webkit-scrollbar-thumb:hover {
   background: var(--sidebar-scroll-thumb-hover);
 }
+
+.css-editor-textarea {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sidebar-scroll-thumb) var(--sidebar-scroll-track);
+}
+
+.css-editor-textarea::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.css-editor-textarea::-webkit-scrollbar-track {
+  background: var(--sidebar-scroll-track);
+}
+
+.css-editor-textarea::-webkit-scrollbar-thumb {
+  background: var(--sidebar-scroll-thumb);
+  border-radius: 9999px;
+  border: 2px solid var(--sidebar-scroll-track);
+}
+
+.css-editor-textarea::-webkit-scrollbar-thumb:hover {
+  background: var(--sidebar-scroll-thumb-hover);
+}

@@ -904,7 +904,7 @@ export default function EditorPage() {
               value={editingValue}
               onChange={(e) => setEditingValue(e.target.value)}
               placeholder={`.mdx-content {\n  font-family: system-ui;\n  color: #111;\n}\n\n.mdx-content h1 { font-size: 2rem; font-weight: 700; }\n.mdx-content p { line-height: 1.7; }`}
-              className="flex-1 font-mono text-xs p-4 resize-none outline-none min-h-72 bg-gray-50 dark:bg-[#101010] text-gray-900 dark:text-[#f1f1f1] placeholder-gray-400 dark:placeholder-[#787878]"
+              className="css-editor-textarea flex-1 font-mono text-xs p-4 resize-none outline-none min-h-72 bg-gray-50 dark:bg-[#101010] text-gray-900 dark:text-[#f1f1f1] placeholder-gray-400 dark:placeholder-[#787878]"
               spellCheck={false}
             />
             <div className="flex items-center gap-2 px-5 py-3 border-t border-gray-200 dark:border-[#2a2a2a] shrink-0">
