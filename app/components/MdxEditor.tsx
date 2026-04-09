@@ -34,7 +34,21 @@ import {
   InsertCodeBlock,
   InsertThematicBreak,
   DiffSourceToggleWrapper,
+  imageDialogState$,
+  cancelLinkEdit$,
+  linkDialogState$,
 } from "@mdxeditor/editor";
+import { useCellValues, usePublisher } from "@mdxeditor/gurx";
+
+/** Closes the link popover whenever the image dialog opens. */
+function LinkImageCoordinator() {
+  const [imageState, linkState] = useCellValues(imageDialogState$, linkDialogState$);
+  const cancelLinkEdit = usePublisher(cancelLinkEdit$);
+  useEffect(() => {
+    if (imageState.type !== "inactive" && linkState.type === "edit") cancelLinkEdit();
+  }, [imageState.type]);
+  return null;
+}
 
 interface Props {
   markdown: string;
@@ -592,6 +606,7 @@ export default function MdxEditor({
           toolbarPlugin({
             toolbarContents: () => (
               <DiffSourceToggleWrapper>
+                <LinkImageCoordinator />
                 <UndoRedo />
                 <Separator />
                 <BoldItalicUnderlineToggles />
