@@ -277,6 +277,276 @@ export default function MdxEditor({
         .mdxeditor.dark .cm-cursor {
           border-left-color: #f1f1f1;
         }
+
+        /* ── Dialog / popover visual polish ─────────────────────────────── */
+
+        /* Remove weak drop-shadow on all dialogs/popovers */
+        [class*="_dialogContent_"],
+        [class*="_largeDialogContent_"],
+        [class*="_linkDialogPopoverContent_"],
+        [class*="_popoverContent_"] {
+          filter: none !important;
+        }
+
+        /* === Image dialog (_dialogContent_) === */
+
+        [class*="_dialogContent_"] {
+          flex-direction: column !important;
+          align-items: stretch !important;
+          padding: 0 !important;
+          overflow: hidden !important;
+          min-width: 420px !important;
+        }
+
+        html:not(.dark) [class*="_dialogContent_"] {
+          background-color: #ffffff !important;
+          border: 1px solid #e5e7eb !important;
+          border-radius: 0.5rem !important;
+          box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 4px 16px rgba(0,0,0,0.08) !important;
+        }
+
+        .dark [class*="_dialogContent_"] {
+          background-color: #000000 !important;
+          border: 1px solid #2a2a2a !important;
+          border-radius: 0.5rem !important;
+          box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 4px 16px rgba(0,0,0,0.4) !important;
+        }
+
+        /* Title (Dialog.Title renders as plain <h2>, no data attribute) */
+        [class*="_dialogContent_"] h2 {
+          font-size: 0.875rem !important;
+          font-weight: 500 !important;
+          padding: 1rem 1.25rem !important;
+          margin: 0 !important;
+        }
+
+        html:not(.dark) [class*="_dialogContent_"] h2 {
+          border-bottom: 1px solid #e5e7eb !important;
+          color: #111827 !important;
+        }
+
+        .dark [class*="_dialogContent_"] h2 {
+          border-bottom: 1px solid #2a2a2a !important;
+          color: #f1f1f1 !important;
+        }
+
+        /* Form body */
+        [class*="_dialogContent_"] form[class*="_multiFieldForm_"] {
+          padding: 1.25rem !important;
+          gap: 0.875rem !important;
+        }
+
+        /* Footer: last div in form = buttons row */
+        html:not(.dark) [class*="_dialogContent_"] form > div:last-child {
+          border-top: 1px solid #e5e7eb !important;
+          padding: 0.75rem 1.25rem !important;
+          margin: 0 -1.25rem -1.25rem !important;
+          background-color: #f9fafb !important;
+        }
+
+        .dark [class*="_dialogContent_"] form > div:last-child {
+          border-top: 1px solid #2a2a2a !important;
+          padding: 0.75rem 1.25rem !important;
+          margin: 0 -1.25rem -1.25rem !important;
+          background-color: #0f0f0f !important;
+        }
+
+        /* Labels */
+        html:not(.dark) [class*="_dialogContent_"] label {
+          color: #374151 !important;
+          font-weight: 500 !important;
+        }
+
+        .dark [class*="_dialogContent_"] label {
+          color: #9a9a9a !important;
+          font-weight: 500 !important;
+        }
+
+        /* Text inputs */
+        html:not(.dark) [class*="_dialogContent_"] [class*="_textInput_"] {
+          background-color: #f9fafb !important;
+          border: 1px solid #e5e7eb !important;
+          border-radius: 0.375rem !important;
+          color: #111827 !important;
+        }
+
+        .dark [class*="_dialogContent_"] [class*="_textInput_"] {
+          background-color: #111111 !important;
+          border: 1px solid #2f2f2f !important;
+          border-radius: 0.375rem !important;
+          color: #f1f1f1 !important;
+        }
+
+        /* === Overlay === */
+        [class*="_dialogOverlay_"] {
+          background-color: #000000 !important;
+          opacity: 0.4 !important;
+        }
+
+        /* === Buttons (primary = Save, secondary = Cancel) === */
+
+        html:not(.dark) [class*="_primaryButton_"] {
+          background-color: #111827 !important;
+          border: 1px solid #111827 !important;
+          color: #ffffff !important;
+          border-radius: 0.375rem !important;
+          font-size: 0.875rem !important;
+          padding: 0.375rem 1rem !important;
+          cursor: pointer !important;
+        }
+        html:not(.dark) [class*="_primaryButton_"]:hover {
+          background-color: #374151 !important;
+          border-color: #374151 !important;
+        }
+
+        .dark [class*="_primaryButton_"] {
+          background-color: #f1f1f1 !important;
+          border: 1px solid #f1f1f1 !important;
+          color: #000000 !important;
+          border-radius: 0.375rem !important;
+          font-size: 0.875rem !important;
+          padding: 0.375rem 1rem !important;
+          cursor: pointer !important;
+        }
+        .dark [class*="_primaryButton_"]:hover {
+          background-color: #d6d6d6 !important;
+          border-color: #d6d6d6 !important;
+        }
+
+        html:not(.dark) [class*="_secondaryButton_"] {
+          background-color: #ffffff !important;
+          border: 1px solid #e5e7eb !important;
+          color: #374151 !important;
+          border-radius: 0.375rem !important;
+          font-size: 0.875rem !important;
+          padding: 0.375rem 1rem !important;
+          cursor: pointer !important;
+        }
+        html:not(.dark) [class*="_secondaryButton_"]:hover {
+          background-color: #f9fafb !important;
+        }
+
+        .dark [class*="_secondaryButton_"] {
+          background-color: transparent !important;
+          border: 1px solid #2a2a2a !important;
+          color: #e5e5e5 !important;
+          border-radius: 0.375rem !important;
+          font-size: 0.875rem !important;
+          padding: 0.375rem 1rem !important;
+          cursor: pointer !important;
+        }
+        .dark [class*="_secondaryButton_"]:hover {
+          background-color: #161616 !important;
+        }
+
+        /* === Link dialog popover (contextual — appears near cursor/link) === */
+
+        html:not(.dark) [class*="_linkDialogPopoverContent_"] {
+          background-color: #ffffff !important;
+          border: 1px solid #e5e7eb !important;
+          border-radius: 0.5rem !important;
+          box-shadow: 0 8px 30px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06) !important;
+          padding: 0 !important;
+          gap: 0 !important;
+          flex-direction: column !important;
+          align-items: stretch !important;
+          overflow: hidden !important;
+        }
+
+        .dark [class*="_linkDialogPopoverContent_"] {
+          background-color: #000000 !important;
+          border: 1px solid #2a2a2a !important;
+          border-radius: 0.5rem !important;
+          box-shadow: 0 8px 30px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.3) !important;
+          padding: 0 !important;
+          gap: 0 !important;
+          flex-direction: column !important;
+          align-items: stretch !important;
+          overflow: hidden !important;
+        }
+
+        /* "Create link" title */
+        [class*="_linkDialogPopoverContent_"]:has([class*="_linkDialogEditForm_"])::before {
+          content: "Create link";
+          display: block;
+          font-size: 0.875rem;
+          font-weight: 500;
+          padding: 1rem 1.25rem;
+        }
+
+        html:not(.dark) [class*="_linkDialogPopoverContent_"]:has([class*="_linkDialogEditForm_"])::before {
+          border-bottom: 1px solid #e5e7eb;
+          color: #111827;
+        }
+
+        .dark [class*="_linkDialogPopoverContent_"]:has([class*="_linkDialogEditForm_"])::before {
+          border-bottom: 1px solid #2a2a2a;
+          color: #f1f1f1;
+        }
+
+        /* Edit form body */
+        [class*="_linkDialogEditForm_"] {
+          padding: 1.25rem !important;
+          gap: 0.875rem !important;
+        }
+
+        /* Footer: buttons row */
+        html:not(.dark) [class*="_linkDialogEditForm_"] > div:last-child {
+          border-top: 1px solid #e5e7eb !important;
+          padding: 0.75rem 1.25rem !important;
+          margin: 0 -1.25rem -1.25rem !important;
+          background-color: #f9fafb !important;
+        }
+
+        .dark [class*="_linkDialogEditForm_"] > div:last-child {
+          border-top: 1px solid #2a2a2a !important;
+          padding: 0.75rem 1.25rem !important;
+          margin: 0 -1.25rem -1.25rem !important;
+          background-color: #0f0f0f !important;
+        }
+
+        html:not(.dark) [class*="_linkDialogEditForm_"] label {
+          color: #374151 !important;
+          font-weight: 500 !important;
+        }
+        .dark [class*="_linkDialogEditForm_"] label {
+          color: #9a9a9a !important;
+          font-weight: 500 !important;
+        }
+
+        /* Link dialog input wrapper */
+        html:not(.dark) [class*="_linkDialogInputWrapper_"] {
+          background-color: #f9fafb !important;
+          border: 1px solid #e5e7eb !important;
+          border-radius: 0.375rem !important;
+        }
+        .dark [class*="_linkDialogInputWrapper_"] {
+          background-color: #111111 !important;
+          border: 1px solid #2f2f2f !important;
+          border-radius: 0.375rem !important;
+        }
+
+        /* Link text inputs */
+        html:not(.dark) [class*="_linkDialogEditForm_"] [class*="_textInput_"] {
+          background-color: #f9fafb !important;
+          border: 1px solid #e5e7eb !important;
+          border-radius: 0.375rem !important;
+          color: #111827 !important;
+        }
+        .dark [class*="_linkDialogEditForm_"] [class*="_textInput_"] {
+          background-color: #111111 !important;
+          border: 1px solid #2f2f2f !important;
+          border-radius: 0.375rem !important;
+          color: #f1f1f1 !important;
+        }
+
+        /* Link dialog input text color */
+        html:not(.dark) [class*="_linkDialogInput_"] {
+          color: #111827 !important;
+        }
+        .dark [class*="_linkDialogInput_"] {
+          color: #f1f1f1 !important;
+        }
       `}</style>
       {css && <style>{css}</style>}
       <MDXEditor
