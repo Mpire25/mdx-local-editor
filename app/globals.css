@@ -106,6 +106,12 @@ body {
   margin-inline: auto;
   overflow-wrap: anywhere;
   zoom: var(--mdx-editor-zoom, 1);
+  padding-bottom: 50vh !important;
+}
+
+.mdx-editor-shell .mdxeditor .cm-sourceView .cm-scroller,
+.mdx-editor-shell .mdxeditor .cm-mergeView .cm-scroller {
+  padding-bottom: 50vh !important;
 }
 
 .sidebar-scroll-area {
