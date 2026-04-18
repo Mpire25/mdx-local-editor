@@ -60,11 +60,25 @@ interface Props {
 }
 
 const MIN_EDITOR_WIDTH = 300;
+const MIN_ZOOM = 60;
+const MAX_ZOOM = 200;
+const ZOOM_STEP = 10;
 const WIDTH_STORAGE_PREFIX = "mdx-editor-max-width";
+const ZOOM_STORAGE_PREFIX = "mdx-editor-zoom";
+
+function clampZoom(value: number) {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
+}
 
 function getStoredMaxWidth(widthStorageKey?: string) {
   if (!widthStorageKey || typeof window === "undefined") return "";
   return localStorage.getItem(`${WIDTH_STORAGE_PREFIX}:${widthStorageKey}`) ?? "";
+}
+
+function getStoredZoom(widthStorageKey?: string) {
+  if (!widthStorageKey || typeof window === "undefined") return 100;
+  const value = Number.parseInt(localStorage.getItem(`${ZOOM_STORAGE_PREFIX}:${widthStorageKey}`) ?? "", 10);
+  return Number.isFinite(value) ? clampZoom(value) : 100;
 }
 
 function applyMaxWidth(shell: HTMLDivElement | null, value: string) {
@@ -77,8 +91,12 @@ function applyMaxWidth(shell: HTMLDivElement | null, value: string) {
 
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed)) return;
-
   shell.style.setProperty("--mdx-rich-max-width", `${Math.max(MIN_EDITOR_WIDTH, parsed)}px`);
+}
+
+function applyZoom(shell: HTMLDivElement | null, zoom: number) {
+  if (!shell) return;
+  shell.style.setProperty("--mdx-editor-zoom", String(clampZoom(zoom) / 100));
 }
 
 export default function MdxEditor({
@@ -91,6 +109,7 @@ export default function MdxEditor({
 }: Props) {
   const shellRef = useRef<HTMLDivElement>(null);
   const [maxWidthInput, setMaxWidthInput] = useState(() => getStoredMaxWidth(widthStorageKey));
+  const [zoom, setZoom] = useState(() => getStoredZoom(widthStorageKey));
 
   const themeClass = theme === "dark" ? "dark" : "light";
   const contentClassName = [
@@ -105,6 +124,10 @@ export default function MdxEditor({
     applyMaxWidth(shellRef.current, maxWidthInput);
   }, [maxWidthInput]);
 
+  useEffect(() => {
+    applyZoom(shellRef.current, zoom);
+  }, [zoom]);
+
   function updateMaxWidth(nextValue: string) {
     setMaxWidthInput(nextValue);
     applyMaxWidth(shellRef.current, nextValue);
@@ -118,6 +141,15 @@ export default function MdxEditor({
     }
 
     localStorage.setItem(storageId, nextValue);
+  }
+
+  function updateZoom(nextValue: number) {
+    const clamped = clampZoom(nextValue);
+    setZoom(clamped);
+    applyZoom(shellRef.current, clamped);
+
+    if (!widthStorageKey) return;
+    localStorage.setItem(`${ZOOM_STORAGE_PREFIX}:${widthStorageKey}`, String(clamped));
   }
 
   return (
@@ -625,6 +657,36 @@ export default function MdxEditor({
                 <InsertTable />
                 <InsertThematicBreak />
                 <InsertCodeBlock />
+                <Separator />
+                <label className="ml-1 mr-[5px] inline-flex items-center gap-1 text-[11px] text-gray-600 dark:text-[#a8a8a8]">
+                  <span>Zoom</span>
+                  <button
+                    type="button"
+                    onClick={() => updateZoom(zoom - ZOOM_STEP)}
+                    disabled={zoom <= MIN_ZOOM}
+                    className="h-6 w-6 rounded border border-gray-300 dark:border-[#3a3a3a] bg-white dark:bg-[#0f0f0f] text-xs text-gray-900 dark:text-[#f1f1f1] disabled:opacity-50"
+                    aria-label="Zoom out"
+                  >
+                    -
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateZoom(100)}
+                    className="h-6 min-w-12 rounded border border-gray-300 dark:border-[#3a3a3a] bg-white dark:bg-[#0f0f0f] px-2 text-xs text-gray-900 dark:text-[#f1f1f1]"
+                    aria-label="Reset zoom to 100 percent"
+                  >
+                    {zoom}%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateZoom(zoom + ZOOM_STEP)}
+                    disabled={zoom >= MAX_ZOOM}
+                    className="h-6 w-6 rounded border border-gray-300 dark:border-[#3a3a3a] bg-white dark:bg-[#0f0f0f] text-xs text-gray-900 dark:text-[#f1f1f1] disabled:opacity-50"
+                    aria-label="Zoom in"
+                  >
+                    +
+                  </button>
+                </label>
                 <Separator />
                 <label className="ml-1 mr-[5px] inline-flex items-center gap-1 text-[11px] text-gray-600 dark:text-[#a8a8a8]">
                   <span>Max width</span>

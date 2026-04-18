@@ -105,6 +105,7 @@ body {
   max-width: var(--mdx-rich-max-width, none) !important;
   margin-inline: auto;
   overflow-wrap: anywhere;
+  zoom: var(--mdx-editor-zoom, 1);
 }
 
 .sidebar-scroll-area {
