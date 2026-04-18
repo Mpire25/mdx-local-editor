@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { get, set } from "idb-keyval";
 import { useToast } from "./ToastProvider";
 
@@ -24,6 +24,7 @@ type SelectedFile = {
 };
 
 type ProfileSource = "file" | "folder" | "default" | "built-in";
+type ImageBaseSource = "file" | "folder" | "default" | "none";
 type Theme = "light" | "dark";
 type Notice = { title: string; message: string } | null;
 type SaveTooltip = "save" | "saveAs" | null;
@@ -137,6 +138,7 @@ type FSHandleWithPermission = FileSystemHandle & {
 const STORAGE_KEY = "mdx-editor-workspace";
 const CSS_PROFILES_KEY = "mdx-editor-css-profiles";
 const DEFAULT_CSS_KEY = "mdx-editor-default-css";
+const IMAGE_BASE_HANDLES_KEY = "mdx-editor-image-base-handles";
 const THEME_KEY = "mdx-editor-theme";
 const AUTOSAVE_KEY = "mdx-editor-autosave";
 
@@ -158,6 +160,72 @@ function stripMarkdownExtension(filename: string): string {
 
 function isNotFoundError(error: unknown): error is DOMException {
   return error instanceof DOMException && error.name === "NotFoundError";
+}
+
+function isPermissionDeniedError(error: unknown): error is DOMException {
+  return error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "SecurityError");
+}
+
+function isExternalSource(path: string): boolean {
+  return /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(path) || path.startsWith("//");
+}
+
+function stripQueryAndHash(path: string): string {
+  const queryIndex = path.indexOf("?");
+  const hashIndex = path.indexOf("#");
+  const firstIndex = [queryIndex, hashIndex].filter((index) => index >= 0).sort((a, b) => a - b)[0];
+  return firstIndex === undefined ? path : path.slice(0, firstIndex);
+}
+
+function decodePath(path: string): string {
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
+}
+
+function normalizePathSegments(path: string): string[] | null {
+  const normalized = path.replace(/\\/g, "/");
+  const segments = normalized.split("/");
+  const resolved: string[] = [];
+
+  for (const segment of segments) {
+    if (!segment || segment === ".") continue;
+    if (segment === "..") {
+      if (resolved.length === 0) return null;
+      resolved.pop();
+      continue;
+    }
+    resolved.push(segment);
+  }
+
+  return resolved;
+}
+
+async function getFileHandleBySegments(
+  root: FileSystemDirectoryHandle,
+  segments: string[],
+): Promise<FileSystemFileHandle | null> {
+  if (segments.length === 0) return null;
+
+  let current = root;
+  for (let index = 0; index < segments.length - 1; index += 1) {
+    const segment = segments[index];
+    try {
+      current = await current.getDirectoryHandle(segment);
+    } catch (error) {
+      if (isNotFoundError(error)) return null;
+      throw error;
+    }
+  }
+
+  try {
+    return await current.getFileHandle(segments[segments.length - 1]);
+  } catch (error) {
+    if (isNotFoundError(error)) return null;
+    throw error;
+  }
 }
 
 async function listMarkdownFiles(dir: FileSystemDirectoryHandle): Promise<string[]> {
@@ -196,6 +264,37 @@ function getSelectedFileStorageKey(selected: SelectedFile | null, entries: Store
   return inFolder ? `${selected.entryId}:${selected.name}` : selected.entryId;
 }
 
+function resolveImageBaseProfile(
+  selected: SelectedFile | null,
+  entries: StoredEntry[],
+  handles: Record<string, FileSystemDirectoryHandle>,
+): { source: ImageBaseSource; key: string | null; handle: FileSystemDirectoryHandle | null } {
+  if (!selected) {
+    if (handles.default) {
+      return { source: "default", key: "default", handle: handles.default };
+    }
+    return { source: "none", key: null, handle: null };
+  }
+
+  const entry = entries.find((e) => e.id === selected.entryId);
+  const inFolder = entry?.kind === "directory";
+  const fileKey = inFolder ? `${selected.entryId}:${selected.name}` : selected.entryId;
+
+  if (handles[fileKey]) {
+    return { source: "file", key: fileKey, handle: handles[fileKey] };
+  }
+
+  if (inFolder && handles[selected.entryId]) {
+    return { source: "folder", key: selected.entryId, handle: handles[selected.entryId] };
+  }
+
+  if (handles.default) {
+    return { source: "default", key: "default", handle: handles.default };
+  }
+
+  return { source: "none", key: null, handle: null };
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function EditorPage() {
@@ -218,12 +317,17 @@ export default function EditorPage() {
   // CSS profiles
   const [cssProfiles, setCssProfiles] = useState<Record<string, string>>({});
   const [defaultCss, setDefaultCss] = useState("");
+  const [imageBaseHandles, setImageBaseHandles] = useState<Record<string, FileSystemDirectoryHandle>>({});
 
   // CSS editor modal
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editingLabel, setEditingLabel] = useState("");
   const [editingValue, setEditingValue] = useState("");
   const [cssOpenedFromSettings, setCssOpenedFromSettings] = useState(false);
+  const [editingImageBaseKey, setEditingImageBaseKey] = useState<string | null>(null);
+  const [editingImageBaseLabel, setEditingImageBaseLabel] = useState("");
+  const [editingImageBaseHandleLabel, setEditingImageBaseHandleLabel] = useState("");
+  const [imageBaseOpenedFromSettings, setImageBaseOpenedFromSettings] = useState(false);
 
   // Rename
   const [renamingKey, setRenamingKey] = useState<string | null>(null);
@@ -235,6 +339,8 @@ export default function EditorPage() {
   const pendingContent = useRef("");
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedIndicatorTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const imageObjectUrlsRef = useRef<Map<string, string>>(new Map());
+  const imagePendingLoadsRef = useRef<Map<string, Promise<string>>>(new Map());
 
   // ─── Init ───────────────────────────────────────────────────────────────
 
@@ -251,10 +357,12 @@ export default function EditorPage() {
       get<StoredEntry[]>(STORAGE_KEY),
       get<Record<string, string>>(CSS_PROFILES_KEY),
       get<string>(DEFAULT_CSS_KEY),
-    ]).then(([storedEntries, storedProfiles, storedDefault]) => {
+      get<Record<string, FileSystemDirectoryHandle>>(IMAGE_BASE_HANDLES_KEY),
+    ]).then(([storedEntries, storedProfiles, storedDefault, storedImageBaseHandles]) => {
       if (storedEntries?.length) setEntries(storedEntries);
       if (storedProfiles) setCssProfiles(storedProfiles);
       if (typeof storedDefault === "string") setDefaultCss(storedDefault);
+      if (storedImageBaseHandles) setImageBaseHandles(storedImageBaseHandles);
     }).catch((error) => {
       console.error("Failed to restore workspace from storage:", error);
     });
@@ -312,6 +420,11 @@ export default function EditorPage() {
     await set(DEFAULT_CSS_KEY, css);
   }
 
+  async function persistImageBaseHandles(next: Record<string, FileSystemDirectoryHandle>) {
+    setImageBaseHandles(next);
+    await set(IMAGE_BASE_HANDLES_KEY, next);
+  }
+
   // ─── Adding entries ─────────────────────────────────────────────────────
 
   async function addFolder() {
@@ -365,6 +478,11 @@ export default function EditorPage() {
 
   function removeEntry(id: string) {
     persistEntries(entries.filter((e) => e.id !== id));
+    const nextImageBaseHandles = { ...imageBaseHandles };
+    for (const key of Object.keys(nextImageBaseHandles)) {
+      if (key === id || key.startsWith(`${id}:`)) delete nextImageBaseHandles[key];
+    }
+    void persistImageBaseHandles(nextImageBaseHandles);
     if (selected?.entryId === id) { setSelected(null); setContent(""); }
     setFolderFiles((prev) => { const n = { ...prev }; delete n[id]; return n; });
     setExpanded((prev) => { const s = new Set(prev); s.delete(id); return s; });
@@ -695,6 +813,15 @@ export default function EditorPage() {
           await persistProfiles(nextProfiles);
         }
 
+        const oldImageBaseKey = `${entryId}:${oldName}`;
+        const newImageBaseKey = `${entryId}:${newName}`;
+        if (imageBaseHandles[oldImageBaseKey] !== undefined) {
+          const nextImageBaseHandles = { ...imageBaseHandles };
+          nextImageBaseHandles[newImageBaseKey] = nextImageBaseHandles[oldImageBaseKey];
+          delete nextImageBaseHandles[oldImageBaseKey];
+          await persistImageBaseHandles(nextImageBaseHandles);
+        }
+
         if (selected?.entryId === entryId && selected.name === oldName) {
           setSelected({ fileHandle: newHandle, dirHandle: dir, entryId, name: newName });
         }
@@ -721,6 +848,20 @@ export default function EditorPage() {
     setEditingKey(null);
     if (cssOpenedFromSettings) {
       setCssOpenedFromSettings(false);
+      setShowSettings(true);
+    }
+  }
+
+  function openImageBaseEditor(key: string, label: string) {
+    setEditingImageBaseKey(key);
+    setEditingImageBaseLabel(label);
+    setEditingImageBaseHandleLabel(imageBaseHandles[key]?.name ?? "");
+  }
+
+  function closeImageBaseEditor() {
+    setEditingImageBaseKey(null);
+    if (imageBaseOpenedFromSettings) {
+      setImageBaseOpenedFromSettings(false);
       setShowSettings(true);
     }
   }
@@ -763,11 +904,172 @@ export default function EditorPage() {
     }
   }
 
+  async function pickImageBaseHandle() {
+    if (editingImageBaseKey === null) return;
+    if (!("showDirectoryPicker" in window)) {
+      setNotice({
+        title: "Folder Picker Not Supported",
+        message: "Your browser does not support folder picking. Use Chrome or Edge.",
+      });
+      return;
+    }
+
+    try {
+      const handle = await (window as typeof window & { showDirectoryPicker: (o?: object) => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker({ mode: "read" });
+      const perm = await (handle as unknown as FSHandleWithPermission).requestPermission({ mode: "read" });
+      if (perm !== "granted") return;
+
+      const nextHandles = { ...imageBaseHandles, [editingImageBaseKey]: handle };
+      await persistImageBaseHandles(nextHandles);
+      setEditingImageBaseHandleLabel(handle.name);
+      toast.success("Image folder set", handle.name);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      console.error("Image folder selection failed:", error);
+      toast.error("Image folder failed", "Could not set image folder for this profile.");
+    }
+  }
+
+  async function clearImageBaseProfile() {
+    if (editingImageBaseKey === null) return;
+    try {
+      const nextHandles = { ...imageBaseHandles };
+      delete nextHandles[editingImageBaseKey];
+      await persistImageBaseHandles(nextHandles);
+      closeImageBaseEditor();
+      toast.info("Image path cleared");
+    } catch (error) {
+      console.error("Image path clear failed:", error);
+      toast.error("Image path clear failed", "Could not clear this image path.");
+    }
+  }
+
   // ─── Derived ────────────────────────────────────────────────────────────
+
+  const selectedEntry = selected ? entries.find((entry) => entry.id === selected.entryId) : null;
+  const { source: imageBaseSource, key: activeImageBaseKey, handle: activeImageBaseHandle } = resolveImageBaseProfile(
+    selected,
+    entries,
+    imageBaseHandles,
+  );
+
+  const clearResolvedImageUrls = useCallback(() => {
+    for (const objectUrl of imageObjectUrlsRef.current.values()) {
+      URL.revokeObjectURL(objectUrl);
+    }
+    imageObjectUrlsRef.current.clear();
+    imagePendingLoadsRef.current.clear();
+  }, []);
+
+  useEffect(() => clearResolvedImageUrls, [clearResolvedImageUrls]);
+
+  useEffect(() => {
+    clearResolvedImageUrls();
+  }, [activeImageBaseHandle, activeImageBaseKey, clearResolvedImageUrls, selected?.entryId, selected?.name]);
+
+  const resolveImagePreview = useCallback(async (src: string): Promise<string> => {
+    const rawSource = src.trim();
+    if (!rawSource || isExternalSource(rawSource)) {
+      return src;
+    }
+
+    const sourceWithBase = rawSource;
+    const pathWithoutQuery = decodePath(stripQueryAndHash(sourceWithBase));
+    if (!pathWithoutQuery) {
+      return src;
+    }
+
+    const folderEntry = selectedEntry?.kind === "directory"
+      ? selectedEntry.handle as FileSystemDirectoryHandle
+      : undefined;
+    const mdxDirectory = selected?.dirHandle ?? undefined;
+
+    let baseDirectory: FileSystemDirectoryHandle | undefined;
+    let normalizedSegments: string[] | null = null;
+    let cacheKey = "";
+
+    if (activeImageBaseHandle) {
+      baseDirectory = activeImageBaseHandle;
+      if (pathWithoutQuery.startsWith("@public/")) {
+        normalizedSegments = normalizePathSegments(pathWithoutQuery.slice("@public/".length));
+      } else if (pathWithoutQuery.startsWith("/")) {
+        normalizedSegments = normalizePathSegments(pathWithoutQuery.slice(1));
+      } else {
+        normalizedSegments = normalizePathSegments(pathWithoutQuery);
+      }
+      cacheKey = `handle:${activeImageBaseKey ?? "unknown"}:${normalizedSegments?.join("/") ?? ""}`;
+    } else if (pathWithoutQuery.startsWith("@public/")) {
+      baseDirectory = folderEntry;
+      normalizedSegments = normalizePathSegments(pathWithoutQuery.slice("@public/".length));
+      cacheKey = `public:${normalizedSegments?.join("/") ?? ""}`;
+    } else if (pathWithoutQuery.startsWith("/")) {
+      baseDirectory = folderEntry;
+      normalizedSegments = normalizePathSegments(pathWithoutQuery.slice(1));
+      cacheKey = `public:${normalizedSegments?.join("/") ?? ""}`;
+    } else {
+      baseDirectory = mdxDirectory ?? folderEntry;
+      normalizedSegments = normalizePathSegments(pathWithoutQuery);
+      cacheKey = `relative:${normalizedSegments?.join("/") ?? ""}`;
+    }
+
+    if (!baseDirectory) {
+      return src;
+    }
+
+    if (!normalizedSegments || normalizedSegments.length === 0) {
+      return src;
+    }
+
+    const cachedObjectUrl = imageObjectUrlsRef.current.get(cacheKey);
+    if (cachedObjectUrl) {
+      return cachedObjectUrl;
+    }
+
+    const pendingLoad = imagePendingLoadsRef.current.get(cacheKey);
+    if (pendingLoad) {
+      return pendingLoad;
+    }
+
+    const loadPromise = (async () => {
+      try {
+        let fileHandle: FileSystemFileHandle | null = null;
+
+        if (cacheKey.startsWith("public:")) {
+          const publicDirectory = await baseDirectory.getDirectoryHandle("public");
+          fileHandle = await getFileHandleBySegments(publicDirectory, normalizedSegments);
+        } else {
+          fileHandle = await getFileHandleBySegments(baseDirectory, normalizedSegments);
+        }
+
+        if (!fileHandle) {
+          return src;
+        }
+
+        const imageFile = await fileHandle.getFile();
+        const objectUrl = URL.createObjectURL(imageFile);
+        const previousObjectUrl = imageObjectUrlsRef.current.get(cacheKey);
+
+        if (previousObjectUrl && previousObjectUrl !== objectUrl) {
+          URL.revokeObjectURL(previousObjectUrl);
+        }
+
+        imageObjectUrlsRef.current.set(cacheKey, objectUrl);
+        return objectUrl;
+      } catch (error) {
+        if (isNotFoundError(error) || isPermissionDeniedError(error)) return src;
+        console.error(`Failed to resolve local image "${src}":`, error);
+        return src;
+      } finally {
+        imagePendingLoadsRef.current.delete(cacheKey);
+      }
+    })();
+
+    imagePendingLoadsRef.current.set(cacheKey, loadPromise);
+    return loadPromise;
+  }, [activeImageBaseHandle, activeImageBaseKey, selectedEntry, selected?.dirHandle]);
 
   const { css: resolvedCss, source: profileSource } = resolveProfile(selected, entries, cssProfiles, defaultCss, theme);
   const isCustomCss = profileSource !== "built-in";
-  const selectedEntry = selected ? entries.find((entry) => entry.id === selected.entryId) : null;
   const selectedDisplayName = selected
     ? selectedEntry?.kind === "directory"
       ? `${selectedEntry.name} / ${selected.name}`
@@ -780,6 +1082,13 @@ export default function EditorPage() {
     folder:    { label: "folder css",  className: "bg-gray-100 text-gray-600 dark:bg-[#121212] dark:text-[#d0d0d0]" },
     default:   { label: "default css", className: "bg-gray-100 text-gray-400 dark:bg-[#121212] dark:text-[#9a9a9a]" },
     "built-in":{ label: theme === "dark" ? "built-in dark" : "built-in light", className: "bg-gray-100 text-gray-400 dark:bg-[#121212] dark:text-[#9a9a9a]" },
+  };
+
+  const imageBaseBadge: Record<ImageBaseSource, { label: string; className: string }> = {
+    file: { label: "file img path", className: "bg-gray-100 text-gray-600 dark:bg-[#121212] dark:text-[#d0d0d0]" },
+    folder: { label: "folder img path", className: "bg-gray-100 text-gray-600 dark:bg-[#121212] dark:text-[#d0d0d0]" },
+    default: { label: "default img path", className: "bg-gray-100 text-gray-400 dark:bg-[#121212] dark:text-[#9a9a9a]" },
+    none: { label: "no img path", className: "bg-gray-100 text-gray-400 dark:bg-[#121212] dark:text-[#9a9a9a]" },
   };
 
   // ─── Render ──────────────────────────────────────────────────────────────
@@ -857,6 +1166,23 @@ export default function EditorPage() {
                   {defaultCss ? "Edit" : "Set up"}
                 </button>
               </div>
+              {/* Default image path */}
+              <div className="flex items-center justify-between px-5 py-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-[#f1f1f1]">Default image folder</p>
+                  <p className="text-xs text-gray-400 dark:text-[#9a9a9a] mt-0.5">Fallback folder mapping for image URLs</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setImageBaseOpenedFromSettings(true);
+                    setShowSettings(false);
+                    openImageBaseEditor("default", "Global default image folder");
+                  }}
+                  className={`px-3 py-1.5 rounded border text-sm ${imageBaseHandles.default ? "border-gray-200 dark:border-[#2f2f2f] bg-white dark:bg-[#111111] hover:bg-gray-50 dark:hover:bg-[#1a1a1a] text-gray-700 dark:text-[#e5e5e5]" : "border-gray-200 dark:border-[#2f2f2f] bg-white dark:bg-[#111111] hover:bg-gray-50 dark:hover:bg-[#1a1a1a] text-gray-400 dark:text-[#9a9a9a]"}`}
+                >
+                  {imageBaseHandles.default ? "Edit" : "Set up"}
+                </button>
+              </div>
               {/* Autosave */}
               <div className="flex items-center justify-between px-5 py-4">
                 <div>
@@ -927,6 +1253,53 @@ export default function EditorPage() {
         </div>
       )}
 
+      {/* ── Image Path Editor Modal ─────────────────────────────────────── */}
+      {editingImageBaseKey !== null && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-8"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeImageBaseEditor();
+          }}
+        >
+          <div className="bg-white dark:bg-black rounded-lg shadow-xl w-full max-w-xl flex flex-col overflow-hidden border border-gray-200 dark:border-[#2a2a2a]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-[#2a2a2a] shrink-0">
+              <div>
+                <p className="text-sm font-medium">
+                  {editingImageBaseKey === "default" ? "Default Image Path" : "Image Path"}
+                </p>
+                <p className="text-xs text-gray-400 dark:text-[#9a9a9a] mt-0.5">{editingImageBaseLabel}</p>
+              </div>
+              <button onClick={closeImageBaseEditor} aria-label="Close image path editor" className="text-gray-400 hover:text-gray-700 dark:hover:text-[#f1f1f1] text-lg leading-none px-1">✕</button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <p className="text-xs text-gray-500 dark:text-[#9a9a9a] leading-relaxed">
+                Pick a folder handle for this file/folder profile. Absolute-style image sources like{" "}
+                <code className="font-mono bg-gray-100 dark:bg-[#1a1a1a] px-1 rounded">/images/example.png</code>{" "}
+                resolve from the picked folder.
+              </p>
+              <div className="flex items-center justify-between gap-2 rounded border border-gray-200 dark:border-[#2a2a2a] bg-gray-50 dark:bg-[#0f0f0f] px-3 py-2">
+                <span className="text-xs text-gray-600 dark:text-[#b0b0b0] truncate">
+                  {editingImageBaseHandleLabel ? `Folder: ${editingImageBaseHandleLabel}` : "Folder: none"}
+                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => void pickImageBaseHandle()}
+                    className="px-2 py-1 rounded border border-gray-200 dark:border-[#2a2a2a] bg-white dark:bg-[#111111] text-xs"
+                  >
+                    Pick folder
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 px-5 py-3 border-t border-gray-200 dark:border-[#2a2a2a] shrink-0">
+              <button onClick={clearImageBaseProfile} className="px-4 py-1.5 border border-gray-200 dark:border-[#2a2a2a] text-sm rounded hover:bg-gray-50 dark:hover:bg-[#161616] text-red-500 ml-auto">
+                Clear
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Sidebar ───────────────────────────────────────────────────────── */}
       {sidebarOpen && (
       <aside className="w-60 shrink-0 border-r border-gray-200 dark:border-[#242424] flex flex-col bg-white dark:bg-black">
@@ -972,6 +1345,7 @@ export default function EditorPage() {
             <ul>
               {entries.map((entry) => {
                 const hasProfile = !!cssProfiles[entry.id];
+                const hasImageBaseProfile = !!imageBaseHandles[entry.id];
                 return (
                   <li key={entry.id} className="group">
                     <div className="flex items-center pr-1 hover:bg-gray-50 dark:hover:bg-[#121212]">
@@ -983,6 +1357,7 @@ export default function EditorPage() {
                           <span className="text-gray-400 dark:text-[#737373] text-[10px] w-2 shrink-0">{expanded.has(entry.id) ? "▼" : "▶"}</span>
                           <span className="truncate font-medium">{entry.name}</span>
                           {hasProfile && <span className="shrink-0 text-[10px] px-1 py-0.5 rounded bg-gray-100 dark:bg-[#1a1a1a] text-gray-600 dark:text-[#cecece] font-mono leading-none">css</span>}
+                          {hasImageBaseProfile && <span className="shrink-0 text-[10px] px-1 py-0.5 rounded bg-gray-100 dark:bg-[#1a1a1a] text-gray-600 dark:text-[#cecece] font-mono leading-none">img</span>}
                         </button>
                       ) : (
                         <button
@@ -991,8 +1366,17 @@ export default function EditorPage() {
                         >
                           <span className="truncate">{entry.name}</span>
                           {hasProfile && <span className="shrink-0 text-[10px] px-1 py-0.5 rounded bg-gray-100 dark:bg-[#1a1a1a] text-gray-600 dark:text-[#cecece] font-mono leading-none">css</span>}
+                          {hasImageBaseProfile && <span className="shrink-0 text-[10px] px-1 py-0.5 rounded bg-gray-100 dark:bg-[#1a1a1a] text-gray-600 dark:text-[#cecece] font-mono leading-none">img</span>}
                         </button>
                       )}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openImageBaseEditor(entry.id, `${entry.name} image path`); }}
+                        title="Edit image path"
+                        aria-label={`Edit image path for ${entry.name}`}
+                        className={`opacity-0 group-hover:opacity-100 shrink-0 px-1 py-1 text-xs ${hasImageBaseProfile ? "text-gray-500 dark:text-[#8d8d8d] hover:text-gray-700 dark:hover:text-[#f1f1f1]" : "text-gray-300 dark:text-[#555555] hover:text-gray-500 dark:hover:text-[#bcbcbc]"}`}
+                      >
+                        ▣
+                      </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); openEditor(entry.id, entry.name); }}
                         title="Edit CSS profile"
@@ -1016,9 +1400,11 @@ export default function EditorPage() {
                         {(folderFiles[entry.id] ?? []).map((filename) => {
                           const renameKey = `${entry.id}:${filename}`;
                           const fileProfileKey = `${entry.id}:${filename}`;
+                          const imageBaseKey = `${entry.id}:${filename}`;
                           const isRenaming = renamingKey === renameKey;
                           const isSelected = selected?.name === filename && selected?.entryId === entry.id;
                           const fileHasProfile = !!cssProfiles[fileProfileKey];
+                          const fileHasImageBaseProfile = !!imageBaseHandles[imageBaseKey];
 
                           return (
                             <li key={filename} className="group/file relative">
@@ -1042,12 +1428,21 @@ export default function EditorPage() {
                                   >
                                     {stripMarkdownExtension(filename)}
                                     {fileHasProfile && <span className="ml-1.5 text-[10px] px-1 py-0.5 rounded bg-gray-100 dark:bg-[#1a1a1a] text-gray-600 dark:text-[#cecece] font-mono leading-none">css</span>}
+                                    {fileHasImageBaseProfile && <span className="ml-1.5 text-[10px] px-1 py-0.5 rounded bg-gray-100 dark:bg-[#1a1a1a] text-gray-600 dark:text-[#cecece] font-mono leading-none">img</span>}
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); openImageBaseEditor(imageBaseKey, `${entry.name} / ${filename} image path`); }}
+                                    title="Edit file image path"
+                                    aria-label={`Edit image path for ${filename}`}
+                                    className={`absolute right-12 top-1/2 -translate-y-1/2 opacity-0 group-hover/file:opacity-100 text-xs px-1 ${fileHasImageBaseProfile ? "text-gray-500 dark:text-[#8d8d8d] hover:text-gray-700 dark:hover:text-[#f1f1f1]" : "text-gray-300 dark:text-[#555555] hover:text-gray-500 dark:hover:text-[#bcbcbc]"}`}
+                                  >
+                                    ▣
                                   </button>
                                   <button
                                     onClick={(e) => { e.stopPropagation(); openEditor(fileProfileKey, `${entry.name} / ${filename}`); }}
                                     title="Edit file CSS profile"
                                     aria-label={`Edit CSS profile for ${filename}`}
-                                    className={`absolute right-6 top-1/2 -translate-y-1/2 opacity-0 group-hover/file:opacity-100 text-xs px-1 ${fileHasProfile ? "text-gray-500 dark:text-[#8d8d8d] hover:text-gray-700 dark:hover:text-[#f1f1f1]" : "text-gray-300 dark:text-[#555555] hover:text-gray-500 dark:hover:text-[#bcbcbc]"}`}
+                                    className={`absolute right-7 top-1/2 -translate-y-1/2 opacity-0 group-hover/file:opacity-100 text-xs px-1 ${fileHasProfile ? "text-gray-500 dark:text-[#8d8d8d] hover:text-gray-700 dark:hover:text-[#f1f1f1]" : "text-gray-300 dark:text-[#555555] hover:text-gray-500 dark:hover:text-[#bcbcbc]"}`}
                                   >
                                     ◈
                                   </button>
@@ -1145,6 +1540,12 @@ export default function EditorPage() {
                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${sourceBadge[profileSource].className}`}>
                   {sourceBadge[profileSource].label}
                 </span>
+                <span
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${imageBaseBadge[imageBaseSource].className}`}
+                  title={activeImageBaseHandle?.name || "No image folder configured"}
+                >
+                  {imageBaseBadge[imageBaseSource].label}
+                </span>
               </div>
             </div>
             <div
@@ -1159,6 +1560,7 @@ export default function EditorPage() {
                 usingCustomCss={isCustomCss}
                 theme={theme}
                 widthStorageKey={selectedFileStorageKey}
+                imagePreviewHandler={resolveImagePreview}
               />
             </div>
           </>

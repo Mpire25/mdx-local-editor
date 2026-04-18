@@ -57,6 +57,7 @@ interface Props {
   usingCustomCss?: boolean;
   theme?: "light" | "dark";
   widthStorageKey?: string;
+  imagePreviewHandler?: (src: string) => Promise<string>;
 }
 
 const MIN_EDITOR_WIDTH = 300;
@@ -106,6 +107,7 @@ export default function MdxEditor({
   usingCustomCss = false,
   theme = "light",
   widthStorageKey,
+  imagePreviewHandler,
 }: Props) {
   const shellRef = useRef<HTMLDivElement>(null);
   const [maxWidthInput, setMaxWidthInput] = useState(() => getStoredMaxWidth(widthStorageKey));
@@ -127,6 +129,75 @@ export default function MdxEditor({
   useEffect(() => {
     applyZoom(shellRef.current, zoom);
   }, [zoom]);
+
+  useEffect(() => {
+    if (!imagePreviewHandler || !shellRef.current) return;
+
+    let isCancelled = false;
+    const shell = shellRef.current;
+
+    const resolveImageElement = async (img: HTMLImageElement) => {
+      const currentSrc = img.getAttribute("src");
+      if (!currentSrc) return;
+
+      const originalSrc = img.dataset.mdxOriginalSrc ?? currentSrc;
+      if (!img.dataset.mdxOriginalSrc) {
+        img.dataset.mdxOriginalSrc = originalSrc;
+      }
+
+      try {
+        const resolvedSrc = await imagePreviewHandler(originalSrc);
+        if (isCancelled || !resolvedSrc || resolvedSrc === currentSrc) return;
+        img.setAttribute("src", resolvedSrc);
+      } catch (error) {
+        console.error(`Failed to resolve image "${originalSrc}" in preview:`, error);
+      }
+    };
+
+    const resolveAllImages = (root: ParentNode) => {
+      root.querySelectorAll("img[src]").forEach((img) => {
+        void resolveImageElement(img as HTMLImageElement);
+      });
+    };
+
+    resolveAllImages(shell);
+
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.type === "attributes") {
+          const target = mutation.target;
+          if (target instanceof HTMLImageElement) {
+            if (target.dataset.mdxOriginalSrc && target.getAttribute("src") === target.dataset.mdxOriginalSrc) {
+              delete target.dataset.mdxOriginalSrc;
+            }
+            void resolveImageElement(target);
+          }
+          continue;
+        }
+
+        for (const addedNode of mutation.addedNodes) {
+          if (!(addedNode instanceof Element)) continue;
+          if (addedNode instanceof HTMLImageElement) {
+            void resolveImageElement(addedNode);
+          } else {
+            resolveAllImages(addedNode);
+          }
+        }
+      }
+    });
+
+    observer.observe(shell, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["src"],
+    });
+
+    return () => {
+      isCancelled = true;
+      observer.disconnect();
+    };
+  }, [imagePreviewHandler, markdown]);
 
   function updateMaxWidth(nextValue: string) {
     setMaxWidthInput(nextValue);
@@ -621,7 +692,7 @@ export default function MdxEditor({
           frontmatterPlugin(),
           linkPlugin(),
           linkDialogPlugin(),
-          imagePlugin(),
+          imagePlugin({ imagePreviewHandler: imagePreviewHandler ?? null }),
           tablePlugin(),
           diffSourcePlugin({ viewMode: "rich-text" }),
           jsxPlugin({
